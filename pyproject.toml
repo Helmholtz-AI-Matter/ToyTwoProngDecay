@@ -1,0 +1,25 @@
+[project]
+name = "toymc-for-mnpe"
+version = "0.1.0"
+description = "a demonstrator for particle physics inspired toy simulator for MNPE"
+readme = "README.md"
+authors = [
+    { name = "Peter Steinbach", email = "p.steinbach@hzdr.de" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.3",
+    "sbi==0.25.0",
+    "torch<2.6",
+]
+
+[project.scripts]
+toymc-for-mnpe = "toymc_for_mnpe:main"
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cpu"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
