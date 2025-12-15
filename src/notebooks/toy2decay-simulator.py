@@ -23,36 +23,7 @@ def _():
 
 
 @app.cell
-def _(DEFAULT_DEVICE, eta1_angle, eta2, mMu, np, phi2, torch):
-    def resolution(mass):
-        slope = -.014 #-.01342
-        xoffset = 1.503
-        yoffset = .01
-        sigmas = (slope*mass + xoffset)**2 + yoffset #low masses are more smeared than higher ones
-        return sigmas
-
-
-    def smear(masses):
-        """
-        Detector smearing model:
-        Multiply mass by a Gaussian-distributed random factor.
-        Gaussian mean = 1.0, sigma = 0.01 * log(mass).
-
-        Parameters
-        ----------
-        masses : torch.Tensor
-            batched masses
-
-        Returns
-        -------
-        torch.Tensor: detector-level smeared mass
-        """
-        sigmas = 0.1*resolution(masses) #low masses are more smeared than higher ones
-        assert sigmas.shape == masses.shape
-        smear_factor = torch.normal(mean=torch.ones_like(masses), std=sigmas)
-        detector_mass = masses * smear_factor
-        return detector_mass
-
+def _(DEFAULT_DEVICE, mMu, torch):
     def generate_decay_event(theta, device=DEFAULT_DEVICE):
         """
         generate toyMC true event.
@@ -70,33 +41,123 @@ def _(DEFAULT_DEVICE, eta1_angle, eta2, mMu, np, phi2, torch):
         """
         theta = theta.to(device) #theta in relation to sbi nomenclature
         n_samples = theta.shape[0]
-    
-        # split available energy
+
+        # split available energy, decay at rest
         E_mu = theta[:,0] / 2.
-        p = np.sqrt(E_mu**2 - mMu**2).unsqueeze(1)
+        p = torch.sqrt(E_mu**2 - mMu**2).unsqueeze(1)
 
         # prong 1
         cos_theta1_ = torch.distributions.uniform.Uniform(-1,1)
         theta1_angle = torch.arccos(cos_theta1_.sample((n_samples,1)))
-        eta1 = -np.log(np.tan(theta1_angle / 2))
-    
+        eta1 = -torch.log(torch.tan(theta1_angle / 2))
+
         phi1_ = torch.distributions.uniform.Uniform(0,2*torch.pi)
         phi1_angle = phi1_.sample((n_samples,1))
 
         pT1 = p * torch.sin(theta1_angle)
-        mu1 = torch.stack([pT1, phi1_angle, eta1, mMu*torch.ones_like(eta1)],dim=1).squeeze()
+        mu1 = torch.hstack([pT1, 
+                            phi1_angle, 
+                            eta1, 
+                            mMu*torch.ones_like(eta1)]
+                          )
 
         # prong 2: back-to-back muon 2
-        phi2_angle = phi1_angle + torch.pi
-        phi2_mask = phi2 >= 2*torch.pi
-        phi2_angle[phi2_mask, :] -= 2.*torch.pi
+        background_phi_offset_ = torch.distributions.normal.Normal(0,torch.pi/4)
+        background_phi_offset = theta[:,1]*background_phi_offset_.sample((phi1_angle.shape[0],)) # should be 0 for signal
+    
+        phi2_angle = phi1_angle + torch.pi + background_phi_offset.unsqueeze(1)
+        phi2_mask = phi2_angle >= 2*torch.pi
+        phi2_angle[phi2_mask] -= 2.*torch.pi
 
-        eta2_angle = -eta1_angle       # follows from θ → π − θ
-        pT2 = pT1          # same pT
+    
+        # populate missing kinematics according to assumptions
+        background_eta_offset_ = torch.distributions.uniform.Uniform(-.25,.25)
+        background_eta_offset  = theta[:,1]*background_eta_offset_.sample((eta1.shape[0],)) # should be 0 for signal
+        eta2 = -eta1 + background_eta_offset.unsqueeze(1)     # follows from θ → π − θ for signal, add offset for background
 
-        mu2 = torch.stack([pT2, phi2_angle, eta2, mMu*torch.ones_like(eta1)],dim=1).squeeze()
+        assert eta2.shape == eta1.shape
+    
+        background_pt_offset_ = torch.distributions.uniform.Uniform(0,.25)
+        background_pt_offset = theta[:,1]*background_pt_offset_.sample((pT1.shape[0],)) # should be 0 for signal
+        pT2 = pT1*(1. - background_pt_offset.unsqueeze(1))          # same pT as decay happens at rest for signal, different pT for background
 
-        return torch.stack([mu1,mu2], dim=1).squeeze()
+        assert pT2.shape == pT1.shape
+    
+        mu2 = torch.hstack([pT2, 
+                            phi2_angle, 
+                            eta2, 
+                            mMu*torch.ones_like(eta2)]
+                          )
+    
+        # defend against some misaligned assumptions
+        assert mu1.shape == mu2.shape, f"[1] {mu1.shape} [2] {mu2.shape}"
+        assert mu2.shape == torch.Size([n_samples,4])
+    
+        return torch.hstack([mu1,mu2])
+
+    return (generate_decay_event,)
+
+
+@app.cell
+def _(generate_decay_event, torch):
+    toy_signal_masses = torch.linspace(62,122,50).unsqueeze(1)
+    toy_signal_labels = torch.zeros_like(toy_signal_masses)
+    toy_backrd_labels = torch.ones_like(toy_signal_masses)
+
+    assert toy_signal_labels.shape == torch.Size([50,1]), f"misaligned shape {toy_signal_labels.shape}"
+
+    toy_signal_thetas = torch.cat([toy_signal_masses, toy_signal_labels], dim=1).squeeze()
+    toy_signal_events = generate_decay_event(toy_signal_thetas)
+    assert toy_signal_events.shape == torch.Size([50,8]), f"misaligned shape {toy_signal_events.shape}"
+
+    toy_backrd_thetas = torch.cat([toy_signal_masses, toy_backrd_labels], dim=1).squeeze()
+    toy_backrd_events = generate_decay_event(toy_backrd_thetas)
+
+    return toy_backrd_events, toy_signal_events
+
+
+@app.cell
+def _(plt, toy_backrd_events, toy_signal_events):
+    figk, axk = plt.subplots(2,3, tight_layout=True, figsize=(10,10))
+
+    axk[0,0].hist(toy_signal_events[:,0])
+    axk[0,0].set_xlabel("$p_T$ of muon 1 / GeV")
+
+    axk[0,1].hist(toy_signal_events[:,1])
+    axk[0,1].set_xlabel("$\phi$ of muon 1 / a.u.")
+
+    axk[0,2].hist(toy_signal_events[:,2])
+    axk[0,2].set_xlabel("$\eta$ of muon 1 / a.u.")
+
+    axk[1,0].hist(toy_signal_events[:,4])
+    axk[1,0].hist(toy_backrd_events[:,4])
+    axk[1,0].set_xlabel("$p_T$ of muon 2 / GeV")
+
+    axk[1,1].hist(toy_signal_events[:,5])
+    axk[1,1].hist(toy_backrd_events[:,5])
+    axk[1,1].set_xlabel("$\phi$ of muon 2 / a.u.")
+
+    axk[1,2].hist(toy_signal_events[:,6],label="signal")
+    axk[1,2].hist(toy_backrd_events[:,6],label="backrd")
+    axk[1,2].set_xlabel("$\eta$ of muon 2 / a.u.")
+    axk[1,2].legend()
+
+    figk
+    return
+
+
+@app.cell
+def _(DEFAULT_DEVICE, generate_decay_event, torch):
+
+    def smear(fourvec):
+        """"""
+        smeared_ = torch.distributions.normal.Normal(fourvec[:,0], fourvec[:,0]*.03)
+        smeared = smeared_.sample((fourvec.shape[0],))
+
+        detector_fourvec = torch.clone(fourvec)
+        detector_fourvec[:,0] = smeared
+    
+        return detector_fourvec
 
     def simulate(theta, device=DEFAULT_DEVICE):
         """
@@ -114,38 +175,15 @@ def _(DEFAULT_DEVICE, eta1_angle, eta2, mMu, np, phi2, torch):
             Detector-level simulated mass values
         """
         events = generate_decay_event(theta, device=device)
-        # could smear depending on signal or background (theta[:,1])
+    
         # to emulate detector response due to different momentum profiles
-        detector_mass = smear(theta[:,0])
+        leftvalue = smear(events[:,:4])
+        rightvalue = smear(events[:,4:])
 
-        return detector_mass
-    return resolution, simulate, smear
-
-
-@app.cell
-def _(plt, resolution, smear, torch):
-    smearing_inputs = torch.linspace(62,122,50)
-    smearing_outputs = smear(smearing_inputs)
-
-    fig1, ax = plt.subplots(1,3, tight_layout=True, figsize=(10,5))
-    ax1, ax2, ax3 = ax
-
-    ax1.plot(smearing_inputs, .1*resolution(smearing_inputs))
-    ax1.set_title("sigma for fwd conv given input mass")
-    ax1.set_xlabel("input mass / 'GeV'")
-    ax1.set_ylabel("sigma / a.u.")
-
-    ax2.plot(smearing_inputs, smearing_outputs)
-    ax2.set_title("after fwd conv")
-    ax2.set_xlabel("input mass / 'GeV'")
-    ax2.set_ylabel("output mass / 'GeV'")
-
-
-    ax3.plot(smearing_inputs, torch.normal(mean=torch.ones_like(smearing_inputs), std=.1*resolution(smearing_inputs)))
-    ax3.set_title("smear factor to multiply input mass with")
-
-    #fig1.show()
-    return
+        value = torch.hstack([leftvalue, rightvalue])
+    
+        return value
+    return (simulate,)
 
 
 @app.cell
@@ -153,6 +191,7 @@ def _(torch):
     #create signal and background
     num_signal = 2000
     num_bkrd = 200
+    num_total = num_signal + num_bkrd
 
     signal_prior = torch.distributions.Cauchy(loc=92.1, scale=.05)
     bkrd_prior = torch.distributions.Uniform(62.,122.)
@@ -163,12 +202,13 @@ def _(torch):
 
     theta[num_signal:,0] = bkrd_prior.sample((num_bkrd,))
     theta[num_signal:,1] = torch.ones_like(theta[num_signal:,0])
-    return num_signal, theta
+    return num_signal, num_total, theta
 
 
 @app.cell
-def _(simulate, theta):
-    x = simulate(theta) # would be great to have 4-vectors for real decays in x
+def _(num_total, simulate, theta):
+    x = simulate(theta) 
+    assert x.shape == (num_total,8)
     return (x,)
 
 
@@ -271,12 +311,26 @@ def _():
 
 @app.cell
 def _(torch):
-    arr1 = torch.ones([6,1])
-    arr2 = torch.zeros([6,1])
+    ar1 = torch.ones([6,1])
+    ar2 = torch.zeros([6,1])
 
-    merged = torch.stack([arr1, arr2], dim=1).squeeze()
+    merged = torch.hstack([ar1, ar2]).squeeze()
 
     print(merged.shape, merged)
+
+    arr1 = torch.ones([6,2])
+    arr2 = torch.zeros([6,2])
+
+    merrged = torch.hstack([arr1, arr2]).squeeze()
+
+    print(merrged.shape, merrged)
+
+    return ar1, ar2
+
+
+@app.cell
+def _(ar1, ar2, torch):
+    torch.cat([ar1, ar2],dim=1).shape
     return
 
 
