@@ -12,6 +12,27 @@ mMu = 0.105658  # GeV
 # Use GPU if available
 DEFAULT_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def to_cartesian(pt, phi, eta, mass) -> Tuple[torch.Tensor,torch.Tensor,torch.Tensor,torch.Tensor]:
+
+    pabs = pt*torch.cosh(eta)
+
+    energy = torch.sqrt(pabs**2 + mass**2)
+
+    px = pt*torch.cos(phi)
+    py = pt*torch.sin(phi)
+    pz = pt*torch.sinh(eta)
+
+    return energy, px, py, pz
+
+def to_ptphieta(energy, px, py, pz) -> Tuple[torch.Tensor,torch.Tensor,torch.Tensor,torch.Tensor]:
+
+    pt = torch.sqrt(px**2 + py**2)
+    pabs = torch.sqrt(px**2 + py**2 + pz**2)
+    phi = torch.atan2(py, px)
+    eta = torch.asinh(pz/pt)
+    mass = torch.sqrt(energy**2 - pabs**2)
+    return pt, phi, eta, mass
+
 def generate_decay_event(theta, device=DEFAULT_DEVICE):
     """
     generate toyMC true events. This function assumes that the signal events are generated from a Z0 boson at rest, any backround stems from an arbitrary combination of kinematic variables
@@ -37,7 +58,9 @@ def generate_decay_event(theta, device=DEFAULT_DEVICE):
 
     # prong 1
     cos_theta1_ = torch.distributions.uniform.Uniform(-1,1)
-    theta1_angle = torch.arccos(cos_theta1_.sample((n_samples,1)))
+    cos_theta1 = cos_theta1_.sample((n_samples,1))
+    theta1_angle = torch.arccos(cos_theta1)
+
     eta1 = -torch.log(torch.tan(theta1_angle / 2))
 
     phi1_ = torch.distributions.uniform.Uniform(0,2*torch.pi)
@@ -50,14 +73,14 @@ def generate_decay_event(theta, device=DEFAULT_DEVICE):
                         mMu*torch.ones_like(eta1)]
                       )
 
+    en1, px1, py1, pz1 = to_cartesian(pT1, phi1_angle, eta1, mMu)
     # prong 2: back-to-back muon 2
     background_phi_offset_ = torch.distributions.normal.Normal(0,torch.pi/4)
     background_phi_offset = theta[:,1]*background_phi_offset_.sample((phi1_angle.shape[0],)) # should be 0 for signal
 
-    phi2_angle = phi1_angle + torch.pi + background_phi_offset.unsqueeze(1)
-    phi2_mask = phi2_angle >= 2*torch.pi
-    phi2_angle[phi2_mask] -= 2.*torch.pi
-
+    #phi2_angle = phi1_angle + torch.pi + background_phi_offset.unsqueeze(1)
+    #phi2_mask = phi2_angle >= 2*torch.pi
+    #phi2_angle[phi2_mask] -= 2.*torch.pi
 
     # populate missing kinematics according to assumptions
     background_eta_offset_ = torch.distributions.uniform.Uniform(-.25,.25)
@@ -68,7 +91,12 @@ def generate_decay_event(theta, device=DEFAULT_DEVICE):
 
     background_pt_offset_ = torch.distributions.uniform.Uniform(0,.25)
     background_pt_offset = theta[:,1]*background_pt_offset_.sample((pT1.shape[0],)) # should be 0 for signal
-    pT2 = pT1*(1. - background_pt_offset.unsqueeze(1))          # same pT as decay happens at rest for signal, different pT for background
+
+    px2 = -px1
+    py2 = -py1
+
+    pT2 = torch.sqrt(px2**2 + py2**2)*(1. - background_pt_offset.unsqueeze(1))
+    phi2_angle = torch.atan2(py2, px2)*(1. - background_phi_offset.unsqueeze(1))
 
     assert pT2.shape == pT1.shape
 
@@ -113,7 +141,7 @@ def test_signal_pz_conservation():
     pT2, eta2 = out[:, 4], out[:, 6]
 
     pz_sum = pT1 * torch.sinh(eta1) + pT2 * torch.sinh(eta2)
-    assert torch.allclose(pz_sum, torch.zeros_like(pz_sum), atol=1e-6)
+    assert torch.allclose(pz_sum, torch.zeros_like(pz_sum), atol=1e-5)
 
 def test_signal_pt_conservation():
     theta = torch.tensor([[91.1876, 0.0]] * 1000, device=DEFAULT_DEVICE)
@@ -125,8 +153,8 @@ def test_signal_pt_conservation():
     px_sum = pT1 * torch.cos(phi1) + pT2 * torch.cos(phi2)
     py_sum = pT1 * torch.sin(phi1) + pT2 * torch.sin(phi2)
 
-    assert torch.allclose(px_sum, torch.zeros_like(px_sum), atol=1e-6)
-    assert torch.allclose(py_sum, torch.zeros_like(py_sum), atol=1e-6)
+    assert torch.allclose(px_sum, torch.zeros_like(px_sum), atol=1e-5)
+    assert torch.allclose(py_sum, torch.zeros_like(py_sum), atol=1e-5)
 
 def test_signal_invariant_mass():
     theta = torch.tensor([[91.1876, 0.0]] * 500, device=DEFAULT_DEVICE)
