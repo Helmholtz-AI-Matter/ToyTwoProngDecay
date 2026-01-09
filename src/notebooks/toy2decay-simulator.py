@@ -26,18 +26,19 @@ def _():
 def _(DEFAULT_DEVICE, mMu, torch):
     def generate_decay_event(theta, device=DEFAULT_DEVICE):
         """
-        generate toyMC true event.
+        generate toyMC true events. This function assumes that the signal events are generated from a Z0 boson at rest, any backround stems from an arbitrary combination of kinematic variables
 
         Parameters
         ----------
         theta : torch.Tensor of shape (N, 2)
             - theta[:,0]: available mass in GeV 
-            - theta[:,1]: flag (0 = signal, nonzero = background)
+            - theta[:,1]: flag from which process the mass is generated 
+            (0 = signal, nonzero = background)
 
         Returns
         -------
         batch_of_4vecs : torch.Tensor
-            two event level four-vectors in a batch 
+            shaped as (B, [Muon1 pt, Muon1 phi, Muon1 eta, Muon2 pt, Muon2 phi, Muon2 eta]) where B is the batch dimension
         """
         theta = theta.to(device) #theta in relation to sbi nomenclature
         n_samples = theta.shape[0]
@@ -64,37 +65,36 @@ def _(DEFAULT_DEVICE, mMu, torch):
         # prong 2: back-to-back muon 2
         background_phi_offset_ = torch.distributions.normal.Normal(0,torch.pi/4)
         background_phi_offset = theta[:,1]*background_phi_offset_.sample((phi1_angle.shape[0],)) # should be 0 for signal
-    
+
         phi2_angle = phi1_angle + torch.pi + background_phi_offset.unsqueeze(1)
         phi2_mask = phi2_angle >= 2*torch.pi
         phi2_angle[phi2_mask] -= 2.*torch.pi
 
-    
+
         # populate missing kinematics according to assumptions
         background_eta_offset_ = torch.distributions.uniform.Uniform(-.25,.25)
         background_eta_offset  = theta[:,1]*background_eta_offset_.sample((eta1.shape[0],)) # should be 0 for signal
         eta2 = -eta1 + background_eta_offset.unsqueeze(1)     # follows from θ → π − θ for signal, add offset for background
 
         assert eta2.shape == eta1.shape
-    
+
         background_pt_offset_ = torch.distributions.uniform.Uniform(0,.25)
         background_pt_offset = theta[:,1]*background_pt_offset_.sample((pT1.shape[0],)) # should be 0 for signal
         pT2 = pT1*(1. - background_pt_offset.unsqueeze(1))          # same pT as decay happens at rest for signal, different pT for background
 
         assert pT2.shape == pT1.shape
-    
+
         mu2 = torch.hstack([pT2, 
                             phi2_angle, 
                             eta2, 
                             mMu*torch.ones_like(eta2)]
                           )
-    
+
         # defend against some misaligned assumptions
         assert mu1.shape == mu2.shape, f"[1] {mu1.shape} [2] {mu2.shape}"
         assert mu2.shape == torch.Size([n_samples,4])
-    
-        return torch.hstack([mu1,mu2])
 
+        return torch.hstack([mu1,mu2])
     return (generate_decay_event,)
 
 
@@ -112,7 +112,6 @@ def _(generate_decay_event, torch):
 
     toy_backrd_thetas = torch.cat([toy_signal_masses, toy_backrd_labels], dim=1).squeeze()
     toy_backrd_events = generate_decay_event(toy_backrd_thetas)
-
     return toy_backrd_events, toy_signal_events
 
 
@@ -121,13 +120,17 @@ def _(plt, toy_backrd_events, toy_signal_events):
     figk, axk = plt.subplots(2,3, tight_layout=True, figsize=(10,10))
 
     axk[0,0].hist(toy_signal_events[:,0])
+    axk[0,0].hist(toy_backrd_events[:,0])
     axk[0,0].set_xlabel("$p_T$ of muon 1 / GeV")
 
     axk[0,1].hist(toy_signal_events[:,1])
+    axk[0,1].hist(toy_backrd_events[:,1])
     axk[0,1].set_xlabel("$\phi$ of muon 1 / a.u.")
 
-    axk[0,2].hist(toy_signal_events[:,2])
+    axk[0,2].hist(toy_signal_events[:,2],label="signal")
+    axk[0,2].hist(toy_backrd_events[:,2],label="backrd")
     axk[0,2].set_xlabel("$\eta$ of muon 1 / a.u.")
+    axk[0,2].legend()
 
     axk[1,0].hist(toy_signal_events[:,4])
     axk[1,0].hist(toy_backrd_events[:,4])
@@ -147,48 +150,164 @@ def _(plt, toy_backrd_events, toy_signal_events):
 
 
 @app.cell
-def _(DEFAULT_DEVICE, generate_decay_event, torch):
+def _(mMu, torch):
+    # reconstruction of the invariant mass
+    def transform_to_epxyz(batch_decay_vectors: torch.Tensor) -> torch.Tensor:
+        """ transform batched decay vectors (B, [Muon1 pt, Muon1 phi, Muon1 eta, Muon1 mass, Muon2 pt, Muon2 phi, Muon2 eta, Muon2 mass]) into (B, [Muon1 E, Muon1 px, Muon1 py, Muon1 pz, Muon2 E, Muon2 px, Muon2 py, Muon2 pz])"""
 
-    def smear(fourvec):
-        """"""
-        smeared_ = torch.distributions.normal.Normal(fourvec[:,0], fourvec[:,0]*.03)
-        smeared = smeared_.sample((fourvec.shape[0],))
+        #indices of bdv
+        bdv = batch_decay_vectors
+        mu1pt, mu1phi, mu1eta, mu1m = list(range(4))
+        mu2pt, mu2phi, mu2eta, mu2m = list(range(4,8))
 
-        detector_fourvec = torch.clone(fourvec)
-        detector_fourvec[:,0] = smeared
+        # indices of value
+        value = torch.zeros([bdv.shape[0],8])
+        mu1E, mu1px, mu1py, mu1pz = list(range(4))
+        mu2E, mu2px, mu2py, mu2pz = list(range(4,8))
+
+        mu1pabs = (bdv[:,mu1pt])*(torch.cosh(bdv[:,mu1eta]))
+        mu2pabs = (bdv[:,mu2pt])*(torch.cosh(bdv[:,mu2eta]))
     
-        return detector_fourvec
+        value[:,mu1E] =  torch.sqrt(mu1pabs**2 + bdv[:,mu1m]**2)
+        value[:,mu2E] =  torch.sqrt(mu2pabs**2 + bdv[:,mu2m]**2)
 
-    def simulate(theta, device=DEFAULT_DEVICE):
-        """
-        Main toy simulation entry point.
-
-        Parameters
-        ----------
-        theta : torch.Tensor of shape (N, 2)
-            - theta[:,0]: available mass in GeV 
-            - theta[:,1]: flag (0 = signal, nonzero = background)
-
-        Returns
-        -------
-        detector_mass : torch.Tensor
-            Detector-level simulated mass values
-        """
-        events = generate_decay_event(theta, device=device)
+        value[:,mu1px] = bdv[:,mu1pt]*torch.cos(bdv[:,mu1phi])
+        value[:,mu1py] = bdv[:,mu1pt]*torch.sin(bdv[:,mu1phi])
+        value[:,mu1pz] = bdv[:,mu1pt]*torch.sinh(bdv[:,mu1eta])
     
-        # to emulate detector response due to different momentum profiles
-        leftvalue = smear(events[:,:4])
-        rightvalue = smear(events[:,4:])
+        value[:,mu2px] = bdv[:,mu2pt]*torch.cos(bdv[:,mu2phi])
+        value[:,mu2py] = bdv[:,mu2pt]*torch.sin(bdv[:,mu2phi])
+        value[:,mu2pz] = bdv[:,mu2pt]*torch.sinh(bdv[:,mu2eta])
 
-        value = torch.hstack([leftvalue, rightvalue])
-    
         return value
-    return (simulate,)
+
+    def invariant_mass_from_epxyz(batch_decay_vectors: torch.Tensor, common_mass: float = mMu) -> torch.Tensor:
+        """ calculate invariant mass from batch_decay_vectors in shape (B, [Muon1 E, Muon1 px, Muon1 py, Muon1 pz, Muon2 E, Muon2 px, Muon2 py, Muon2 pz]) """
+
+        bdv = batch_decay_vectors
+        value = torch.zeros([bdv.shape[0],1])
+
+        # indices of bdv
+        mu1E, mu1px, mu1py, mu1pz = list(range(4))
+        mu2E, mu2px, mu2py, mu2pz = list(range(4,8))
+
+        value[:,0] = 2*(common_mass**2) + 2*(bdv[:,mu1E]*bdv[:,mu2E] - (bdv[:,mu1px]*bdv[:,mu2px] - bdv[:,mu1py]*bdv[:,mu2py] - bdv[:,mu1pz]*bdv[:,mu2pz]))
+
+        return torch.sqrt(value)
+    return invariant_mass_from_epxyz, transform_to_epxyz
 
 
 @app.cell
 def _(torch):
-    #create signal and background
+    # TODO: smear the MC particles to emulate detector reaction
+    # def resolution(pt):
+    #     slope = -.014 #-.01342
+    #     xoffset = 1.503
+    #     yoffset = .01
+    #     sigmas = (slope*pt + xoffset)**2 + yoffset #low masses are more smeared than higher ones
+    #     return sigmas
+
+    def smear_ptphieta(batch_decay_vectors: torch.Tensor) -> torch.Tensor:
+        """ apply detector resolution effects to mc particles. particles in batched decay vectors are assumed to comply to (B, [Muon1 pt, Muon1 phi, Muon1 eta, Muon1 mass, Muon2 pt, Muon2 phi, Muon2 eta, Muon2 mass]); the same format is returned
+    
+        some inspiration was taken from 
+        [1] https://ar5iv.labs.arxiv.org/html/2212.07338
+        """
+
+        bdv = batch_decay_vectors
+        # indices of bdv
+        mu1pt, mu1phi, mu1eta, mu1m = list(range(4))
+        mu2pt, mu2phi, mu2eta, mu2m = list(range(4,8))
+    
+        value = torch.clone(bdv)
+    
+        sigmas = torch.distributions.uniform.Uniform(.01,.04).sample((value.shape[0],)) #range approximated from [1] fig 10
+        pt1_smear_factor = torch.normal(mean=torch.ones_like(bdv[:,mu1pt]), std=sigmas)
+        pt2_smear_factor = torch.normal(mean=torch.ones_like(bdv[:,mu2pt]), std=sigmas)
+    
+        value[:,mu1pt] *= pt1_smear_factor
+        value[:,mu2pt] *= pt2_smear_factor
+
+        #TODO: smear phi and eta too, should be dependent on phi/eta respectively
+        phi1_smear_factor = torch.normal(
+                                mean=torch.ones_like(bdv[:,mu1phi]), 
+                                std=torch.ones_like(sigmas)*.01
+                            )
+        phi2_smear_factor = torch.flip(phi1_smear_factor,dims=(0,)) #reverse
+        value[:,mu1phi] *= phi1_smear_factor
+        value[:,mu2phi] *= phi2_smear_factor
+
+        eta1_smear_factor = torch.normal(
+                                mean=torch.ones_like(bdv[:,mu1eta]), 
+                                std=torch.ones_like(sigmas)*.01
+                            )
+        eta2_smear_factor = torch.flip(eta1_smear_factor, dims=(0,))
+        value[:,mu1eta] *= eta1_smear_factor
+        value[:,mu2eta] *= eta2_smear_factor
+    
+        return value
+    
+    
+    return (smear_ptphieta,)
+
+
+@app.cell
+def _(
+    invariant_mass_from_epxyz,
+    smear_ptphieta,
+    toy_backrd_events,
+    toy_signal_events,
+    transform_to_epxyz,
+):
+    # in sbi lingo: the table with 8+1 columns made from the events are the observations x 
+    dtoy_signal_events, dtoy_backrd_events = smear_ptphieta(toy_signal_events), smear_ptphieta(toy_backrd_events)
+
+    dtoy_signal_epxyz, dtoy_backrd_epxyz = transform_to_epxyz(dtoy_signal_events), transform_to_epxyz(dtoy_backrd_events)
+
+    toy_signal_dinvm, toy_backrd_dinvm = invariant_mass_from_epxyz(dtoy_signal_epxyz), invariant_mass_from_epxyz(dtoy_backrd_epxyz)
+
+
+    return
+
+
+@app.cell
+def _(
+    DEFAULT_DEVICE,
+    generate_decay_event,
+    invariant_mass_from_epxyz,
+    smear_ptphieta,
+    torch,
+    transform_to_epxyz,
+):
+    def simulate(thetas: torch.Tensor, device = DEFAULT_DEVICE) -> torch.Tensor :
+
+        # generate MC ground truth
+        events = generate_decay_event(thetas)
+
+        # smear to emulate detector effects
+        value = smear_ptphieta(events)
+
+        return value
+
+    def invariant_mass_from_ptphieta(batch_decay_vectors: torch.Tensor):
+
+        bdv = batch_decay_vectors
+        assert torch.allclose(bdv[:,3],bdv[:,-1],atol=1e-4), f"masses are not compatible {bdv[0,3],bdv[-1,-1]}"
+    
+        # convert to (E, px, py, pz) coordinates
+        epxyz = transform_to_epxyz(bdv)
+
+        # calculate invariant mass of decay produces
+        value = invariant_mass_from_epxyz(epxyz)
+
+        return value
+    return invariant_mass_from_ptphieta, simulate
+
+
+@app.cell
+def _(torch):
+    ## the full data generating pipeline ############################################################
+    # generate the mass distribution, i.e. theta, from our priors
     num_signal = 2000
     num_bkrd = 200
     num_total = num_signal + num_bkrd
@@ -197,9 +316,12 @@ def _(torch):
     bkrd_prior = torch.distributions.Uniform(62.,122.)
 
     theta = torch.empty((num_signal+num_bkrd,2))
+
+    # generate signal with label 0
     theta[:num_signal,0] = signal_prior.sample((num_signal,))
     theta[:num_signal,1] = torch.zeros_like(theta[:num_signal,0])
 
+    # generate background with label 1
     theta[num_signal:,0] = bkrd_prior.sample((num_bkrd,))
     theta[num_signal:,1] = torch.ones_like(theta[num_signal:,0])
     return num_signal, num_total, theta
@@ -213,8 +335,39 @@ def _(num_total, simulate, theta):
 
 
 @app.cell
-def _(np, num_signal, plt, theta):
-    fig2, axs_ = plt.subplots(1,2, tight_layout=True)
+def _(generate_decay_event, mMu, theta, torch, transform_to_epxyz):
+    mc_events = generate_decay_event(theta)
+    mc_epxyz = transform_to_epxyz(mc_events)
+
+    mc_E1_ = torch.sqrt(mc_epxyz[:,1]**2 + mc_epxyz[:,2]**2 + mc_epxyz[:,3]**2 + mMu**2)
+    print(mc_E1_[:5,...])
+    print(mc_epxyz[:5,0])
+    assert torch.allclose(mc_E1_,mc_epxyz[:,0], atol=1e-4)
+
+    mc_E2_ = torch.sqrt(mc_epxyz[:,5]**2 + mc_epxyz[:,6]**2 + mc_epxyz[:,7]**2 + mMu**2)
+    assert torch.allclose(mc_E2_,mc_epxyz[:,4], atol=1e-4)
+    return mc_epxyz, mc_events
+
+
+@app.cell
+def _(
+    invariant_mass_from_epxyz,
+    invariant_mass_from_ptphieta,
+    mc_epxyz,
+    mc_events,
+    np,
+    num_signal,
+    plt,
+    theta,
+    x,
+):
+    mc_inv   = invariant_mass_from_epxyz(mc_epxyz)
+
+    mc_x = invariant_mass_from_ptphieta(mc_events)
+    pseudo_x = invariant_mass_from_ptphieta(x)
+
+
+    fig2, axs_ = plt.subplots(1,3, figsize=(12,4),tight_layout=True)
 
     axs_[0].hist([theta[:num_signal,0], theta[num_signal:,0]], bins=np.arange(62,122,1), stacked=True, label=["signal", "background"] )
     axs_[0].set_title("`theta` from toy prior")
@@ -222,115 +375,24 @@ def _(np, num_signal, plt, theta):
     axs_[0].set_ylabel("count / 1 GeV")
 
 
-    axs_[1].hist([theta[:num_signal,0], theta[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
+    axs_[2].hist([pseudo_x[:num_signal,0], pseudo_x[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
+    axs_[2].set_xlabel("(rec) input mass / 'GeV'")
+    axs_[2].set_ylabel("count / 1 GeV")
+    axs_[2].set_title("mass calculated from x w/ smearing")
+
+    #axs_[1].set_ylim(1,10_000)
+
+    axs_[1].hist([mc_x[:num_signal,0], mc_x[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
     axs_[1].set_xlabel("input mass / 'GeV'")
     axs_[1].set_ylabel("count / 1 GeV")
-    axs_[1].set_ylim(1,10_000)
+    axs_[1].set_title("mass calculated from x w/o smearing")
 
-    axs_[1].set_yscale("log")
-    axs_[1].legend()
-    return
+    #axs_[1].set_ylim(1,10_000)
 
+    axs_[2].set_yscale("log")
+    axs_[2].legend()
 
-@app.cell
-def _(np, num_signal, plt, theta, x):
-    fig3, axs = plt.subplots(1,2, tight_layout=True)
-
-    axs[0].hist([x[:num_signal], x[num_signal:]], bins=np.arange(62,122,1), stacked=True, label=["rec signal", "rec background"] )
-    axs[0].hist(theta[:,0], bins=np.arange(62,122,1.), histtype='step', label=["ground truth"] )
-    axs[0].set_title("reconstructed `x` for `theta`")
-    axs[0].set_xlabel("input mass / 'GeV'")
-    axs[0].set_ylabel("count / 1 GeV")
-
-
-    axs[1].hist([x[:num_signal], x[num_signal:]], bins=np.arange(62,122,1.), stacked=True, 
-                label=["rec signal", "rec background"] )
-    axs[1].hist(theta[:,0], bins=np.arange(62,122,1.), histtype='step', label=["sim ground truth"] )
-
-    axs[1].set_xlabel("input mass / 'GeV'")
-    axs[1].set_ylabel("count / 1 GeV")
-    axs[1].set_ylim(1,50_000)
-
-    axs[1].set_yscale("log")
-    axs[1].legend()
-    return
-
-
-@app.cell
-def _(theta, x):
-    # Now do MNPE demo
-    # https://sbi.readthedocs.io/en/latest/reference/_autosummary/sbi.inference.MNPE.html
-    from sbi.inference import MNPE
-
-    num_sims = theta.shape[0]
-
-    theta[:,1] = theta[:,1].int()
-
-    thetas = theta[1:,...]
-    xs = x[1:,...].unsqueeze(-1)
-
-    print(thetas.shape, xs.shape)
-
-    inference = MNPE()
-    _ = inference.append_simulations(thetas, xs).train()
-    return (inference,)
-
-
-@app.cell
-def _(inference, x):
-
-    posterior = inference.build_posterior()
-
-    x_o = x[:1,...].unsqueeze(-1)
-    samples = posterior.sample((100,), x=x_o)
-    return
-
-
-@app.cell
-def _():
-    # from sbi.analysis import pairplot
-    # from sbi.analysis.plotting_classes import HistDiagOptions
-
-    # true = theta[:1,...]
-    # print(samples.shape, samples.min(), samples.mean(), samples.max(), true)
-
-    # fig, axes = pairplot(
-    #     samples,
-    #     limits=[[70,120],[0,2]],
-    #     figsize=(10, 10),
-    #     points=true,
-    #     labels=["deconv mass","estimate label"],
-    #     diag_kwargs=HistDiagOptions(
-    #         mpl_kwargs={
-    #             "bins": np.arange(62,122,1),
-    #         }
-    #     )
-    # )
-    return
-
-
-@app.cell
-def _(torch):
-    ar1 = torch.ones([6,1])
-    ar2 = torch.zeros([6,1])
-
-    merged = torch.hstack([ar1, ar2]).squeeze()
-
-    print(merged.shape, merged)
-
-    arr1 = torch.ones([6,2])
-    arr2 = torch.zeros([6,2])
-
-    merrged = torch.hstack([arr1, arr2]).squeeze()
-
-    print(merrged.shape, merrged)
-
-    return ar1, ar2
-
-
-@app.cell
-def _(ar1, ar2, torch):
-    torch.cat([ar1, ar2],dim=1).shape
+    fig2
     return
 
 
