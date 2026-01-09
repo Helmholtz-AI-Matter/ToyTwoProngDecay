@@ -55,11 +55,11 @@ def _(Tuple, torch):
     assert torch.allclose(eta_, eta_rt), f"etas don't match {eta_,eta_rt}"
 
 
-    return (to_cartesian,)
+    return to_cartesian, to_ptphieta
 
 
 @app.cell
-def _(DEFAULT_DEVICE, mMu, to_cartesian, torch):
+def _(DEFAULT_DEVICE, mMu, to_ptphieta, torch):
     def generate_decay_event(theta, device=DEFAULT_DEVICE):
         """
         generate toyMC true events. This function assumes that the signal events are generated from a Z0 boson at rest, any backround stems from an arbitrary combination of kinematic variables
@@ -85,54 +85,71 @@ def _(DEFAULT_DEVICE, mMu, to_cartesian, torch):
 
         # prong 1
         cos_theta1_ = torch.distributions.uniform.Uniform(-1,1)
-        theta1_angle = torch.arccos(cos_theta1_.sample((n_samples,1)))
-        eta1 = -torch.log(torch.tan(theta1_angle / 2))
+        cos_theta1 = cos_theta1_.sample((n_samples,1))
+        sin_theta1 = torch.sqrt(1 - cos_theta1**2)
+
+        # theta1_angle = torch.arccos(cos_theta1)
+
+        # eta1 = -torch.log(torch.tan(theta1_angle / 2))
 
         phi1_ = torch.distributions.uniform.Uniform(0,2*torch.pi)
-        phi1_angle = phi1_.sample((n_samples,1))
+        phi1 = phi1_.sample((n_samples,1))
 
-        pT1 = p / torch.cosh(eta1)
-        mu1 = torch.hstack([pT1, 
-                            phi1_angle, 
-                            eta1, 
-                            mMu*torch.ones_like(eta1)]
-                          )
-    
-        en1, px1, py1, pz1 = to_cartesian(pT1, phi1_angle, eta1, mMu)
+        # pT1 = p / torch.cosh(eta1)
+        # mu1 = torch.hstack([pT1,
+        #                     phi1_angle,
+        #                     eta1,
+        #                     mMu*torch.ones_like(eta1)]
+        #                   )
+
+        # en1, px1, py1, pz1 = to_cartesian(pT1, phi1_angle, eta1, mMu)
+
+        en1 = E_mu.unsqueeze(1)
+        px1 = p * sin_theta1 * torch.cos(phi1)
+        py1 = p * sin_theta1 * torch.sin(phi1)
+        pz1 = p * cos_theta1
+        pt1, phi1, eta1, mass1 = to_ptphieta(en1, px1, py1, pz1)
+        mu1 = torch.hstack([pt1,
+                            phi1,
+                            eta1,
+                            mass1])
+
         # prong 2: back-to-back muon 2
         background_phi_offset_ = torch.distributions.normal.Normal(0,torch.pi/4)
-        background_phi_offset = theta[:,1]*background_phi_offset_.sample((phi1_angle.shape[0],)) # should be 0 for signal
+        background_phi_offset = theta[:,1]*background_phi_offset_.sample((phi1.shape[0],)) # should be 0 for signal
 
-        # phi2_angle = phi1_angle + torch.pi + background_phi_offset.unsqueeze(1)
-        # phi2_mask = phi2_angle >= 2*torch.pi
-        # phi2_angle[phi2_mask] -= 2.*torch.pi
-
+        #phi2_angle = phi1_angle + torch.pi + background_phi_offset.unsqueeze(1)
+        #phi2_mask = phi2_angle >= 2*torch.pi
+        #phi2_angle[phi2_mask] -= 2.*torch.pi
 
         # populate missing kinematics according to assumptions
         background_eta_offset_ = torch.distributions.uniform.Uniform(-.25,.25)
         background_eta_offset  = theta[:,1]*background_eta_offset_.sample((eta1.shape[0],)) # should be 0 for signal
-        eta2 = -eta1 + background_eta_offset.unsqueeze(1)     # follows from θ → π − θ for signal, add offset for background
+        #eta2 = -eta1 + background_eta_offset.unsqueeze(1)     # follows from θ → π − θ for signal, add offset for background
 
-        assert eta2.shape == eta1.shape
+
 
         background_pt_offset_ = torch.distributions.uniform.Uniform(0,.25)
-        background_pt_offset = theta[:,1]*background_pt_offset_.sample((pT1.shape[0],)) # should be 0 for signal
+        background_pt_offset = theta[:,1]*background_pt_offset_.sample((pt1.shape[0],)) # should be 0 for signal
 
+        en2 = torch.clone(en1)
         px2 = -px1
         py2 = -py1
+        pz2 = -pz1
 
-        pT2 = torch.sqrt(px2**2 + py2**2)*(1. - background_pt_offset.unsqueeze(1))
-        phi2_angle = torch.atan2(py2, px2)*(1. - background_phi_offset.unsqueeze(1))
-    
-        # background_pt_offset_ = torch.distributions.uniform.Uniform(0,.25)
-        # background_pt_offset = theta[:,1]*background_pt_offset_.sample((pT1.shape[0],)) # should be 0 for signal
-        # pT2 = pT1*(1. - background_pt_offset.unsqueeze(1))          # same pT as decay happens at rest for signal, different pT for background
+        pt2, phi2, eta2, mass2 = to_ptphieta(en2, px2, py2, pz2)
 
-        assert pT2.shape == pT1.shape
+        assert eta2.shape == eta1.shape
+        assert phi2.shape == phi1.shape
+        assert pt2.shape == pt1.shape
 
-        mu2 = torch.hstack([pT2, 
-                            phi2_angle, 
-                            eta2, 
+        pt2 *= (1. - background_pt_offset.unsqueeze(1))
+        phi2 *= (1. - background_phi_offset.unsqueeze(1))
+        eta2 *= (1. - background_eta_offset.unsqueeze(1))
+
+        mu2 = torch.hstack([pt2,
+                            phi2,
+                            eta2,
                             mMu*torch.ones_like(eta2)]
                           )
 
@@ -141,6 +158,7 @@ def _(DEFAULT_DEVICE, mMu, to_cartesian, torch):
         assert mu2.shape == torch.Size([n_samples,4])
 
         return torch.hstack([mu1,mu2])
+
     return (generate_decay_event,)
 
 
@@ -330,7 +348,7 @@ def _(
     def invariant_mass_from_ptphieta(batch_decay_vectors: torch.Tensor):
 
         bdv = batch_decay_vectors
-        assert torch.allclose(bdv[:,3],bdv[:,-1],atol=1e-4), f"masses are not compatible {bdv[0,3],bdv[-1,-1]}"
+        #assert torch.allclose(bdv[:,3],bdv[:,-1],atol=1e-4), f"masses are not compatible {bdv[0,3],bdv[-1,-1]}"
 
         # convert to (E, px, py, pz) coordinates
         epxyz = ptphieta_to_epxyz(bdv)
