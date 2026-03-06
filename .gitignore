@@ -10,3 +10,6 @@ wheels/
 .venv
 *~
 *marimo*
+*html
+*pdf
+sbi-logs
