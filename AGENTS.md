@@ -1,24 +1,25 @@
 # AGENTS GUIDE
 
 ## Purpose
-- Give every agent entering this tree the context they need before editing anything: this repo is a toy Monte Carlo demonstrator for MNPE built with Python, NumPy, PyTorch, and SBI.
-- Most logic belongs in `src/toymc_for_mnpe`, `tests`, and the historical `src/notebooks` artifacts. Keep the instructions below in sync as you add commands, linting, or style expectations.
+- Give every agent entering this tree the context they need before editing anything: this repo is an open-source toy two-prong decay simulator built with Python, NumPy, PyTorch, and SBI.
+- Most logic belongs in `src/ttpd`, `tests`, and the historical `src/notebooks` artifacts. Keep the instructions below in sync as you add commands, linting, or style expectations.
 
 ## Cursor & Copilot instructions
 - No `.cursor` or `.cursorrules` directories were found under this tree, so no extra cursor rules apply today.
 - The repository also lacks `.github/copilot-instructions.md`; assume Copilot behaves with its default heuristics unless you add such a file later.
 
 ## Environment setup
-- Python 3.13 is required per `pyproject.toml` (the embedded `py313` virtualenv demonstrates this version); prefer to recreate that interpreter with `python -m venv .venv` or reuse `py313` by running `source py313/bin/activate`.
+- Python 3.11 or newer is required per `pyproject.toml`; prefer to recreate a local interpreter with `python -m venv .venv` or reuse `py313` by running `source py313/bin/activate`.
 - Upgrade pip/setuptools before installing dependencies: `python -m pip install --upgrade pip setuptools wheel`.
-- Install runtime and dev requirements via the stock builder: `uv install` (it reads `pyproject.toml` and `uv.lock`).
-- For repeatable shells, keep `uv.lock` in sync and rerun `uv install` whenever dependencies change.
-- After every dependency change, rerun `uv install`, verify `uv.lock`, and commit both `pyproject.toml`/`uv.lock` together so the lock file never lags.
+- Install runtime and dev requirements with `uv sync --all-groups` (it reads `pyproject.toml` and `uv.lock`).
+- For repeatable shells, keep `uv.lock` in sync and rerun `uv sync --all-groups` whenever dependencies change.
+- After every dependency change, rerun `uv lock` and `uv sync --all-groups`, verify `uv.lock`, and commit both `pyproject.toml`/`uv.lock` together so the lock file never lags.
+- Source installs should work with both `pip install .` and `uv sync --all-groups`; keep both paths working when changing packaging metadata.
 - Activate the same interpreter you use for CI/UV (`py313/bin/activate`) before invoking tests or builds, which keeps CUDA/CPU detection consistent.
 
 ## Build, packaging, and execution
 - `uv build` produces a wheel or sdist depending on the `uv` defaults; inspect `dist/` afterwards to verify metadata.
-- `uv run toymc-for-mnpe` (or `python -m toymc_for_mnpe`) launches the CLI entry point defined under `[project.scripts]` and is useful for smoke-running the package.
+- `uv run ttpd` launches the CLI entry point defined under `[project.scripts]`; `python -m ttpd` is the matching module entry point if you add one later.
 - `uv run --` lets you pass arbitrary commands through the `uv` shim; e.g., `uv run -- python -m module` picks up the locked interpreter and dependencies from this workspace.
 - Treat artifacts under `src/notebooks` as documentation: rerun them locally, then export new HTML/JSON when the narrative needs updating.
 - `uv build` is also the recommended way to exercise packaging metadata; if you override `uv` defaults, note the override in this file for future agents.
@@ -32,7 +33,7 @@
 - Tests now live in `tests/test_generator.py` and use Pytest signatures and NumPy-style docstrings; refer to that file for examples of how to seed randomness and assert invariants about momentum/invariant mass.
 
 ## Generator & simulation
-- `src/toymc_for_mnpe/generator.py` now hosts the physics helpers (`to_cartesian`, `to_ptphieta`, `ptphieta_to_epxyz`, `invariant_mass_from_epxyz`, etc.) plus the new abstractions `TwoProngDecay` and the `SimulateFactory` dataclass.
+- `src/ttpd/generator.py` now hosts the physics helpers (`to_cartesian`, `to_ptphieta`, `ptphieta_to_epxyz`, `invariant_mass_from_epxyz`, etc.) plus the abstractions `TwoProngDecay` and the `SimulateFactory` dataclass.
 - `TwoProngDecay` exposes `generate`, `smear`, and `simulate` methods with configurable product mass, smearing function, device placement, and optional seeds to keep samplers deterministic.
 - The default smearing function mirrors the notebook’s `smear_ptphieta` (pt/dphi/eta jitter, independent phi/eta resets); inject a custom callable when you need a different detector model.
 - `SimulateFactory.create(...)` returns a dataclass that keeps the `TwoProngDecay` instance on the `decay` attribute while providing the single-argument `simulate(theta)` callable shown in the notebook. Pass `generation_seed`/`smear_seed` through the factory to reproduce specific draws or share random states across runs.
@@ -47,8 +48,8 @@
 - When adding new modules, run `python -m ruff check src tests` locally before committing, and treat `uv test` as the final verification step.
 
 ## Repository layout & artifacts
-- `pyproject.toml` + `uv.lock` drive dependency resolution through `uv_build` and lock PyTorch/NumPy versions required for the simulator.
-- Production code lives under `src/toymc_for_mnpe`; add new modules alongside `generator.py` once you start fleshing out the package.
+- `pyproject.toml` + `uv.lock` drive dependency resolution and lock PyTorch/NumPy versions required for the simulator.
+- Production code lives under `src/ttpd`; add new modules alongside `generator.py` once you start fleshing out the package.
 - Legacy or illustrative notebooks sit in `src/notebooks`; treat the `.py`, `.ipynb`, `.html`, and `sbi-logs` artifacts as documentation that only changes when you regenerate them deliberately.
 - Tests live in `tests/` and currently focus on the `generate_decay_event` helper; any new features should ship with a test that mirrors the existing torch-based style.
 
@@ -63,7 +64,7 @@
 ### Imports
 - Group imports in three sections: standard library, third-party, and local packages, each separated by a single blank line.
 - Use parentheses for multi-line imports and prefer explicit `from typing import Tuple` statements when typing tensors or tuples of tensors.
-- Local imports should align with the `toymc_for_mnpe` package structure once you introduce more modules; avoid importing from `src` directly.
+- Local imports should align with the `ttpd` package structure once you introduce more modules; avoid importing from `src` directly.
 
 ### Formatting
 - Follow PEP 8 defaults: 4 spaces per indent level, blank lines between top-level functions, and hanging indents for wrapped arguments (notice how `torch.hstack` arguments are indented in `tests/test_generator.py`).
@@ -133,4 +134,4 @@
 ## Reminders for future agents
 - Update this document whenever you add build/test commands, new dependency groups, or a linter/formatter configuration.
 - Document new entry points in the `Build, packaging, and execution` section so other agents know how to run them.
-- Keep new Python logic inside `src/toymc_for_mnpe` and `tests` unless you have a strong justification to expand the package layout.
+- Keep new Python logic inside `src/ttpd` and `tests` unless you have a strong justification to expand the package layout.

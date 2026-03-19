@@ -431,7 +431,42 @@ class SimulateFactory:
             smear_seed=smear_seed,
         )
 
+    def create_simulator(
+        self,
+        generation_seed: Optional[int] = None,
+        smear_seed: Optional[int] = None,
+        device: Optional[torch.device] = None,
+    ) -> Callable[[torch.Tensor], torch.Tensor]:
+        """Return a simulator callable that reuses this factory's decay.
+
+        Parameters
+        ----------
+        generation_seed: Optional[int]
+            Optional seed passed to `self.simulate` so the generated kinematics
+            stay deterministic when the callable is reused.
+        smear_seed: Optional[int]
+            Optional seed passed to the smear function.
+        device: Optional[torch.device]
+            Optional override for the generation device; defaults to the factory's
+            own device if ``None``.
+
+        Returns
+        -------
+        Callable[[torch.Tensor], torch.Tensor]
+            Function that accepts ``theta`` and returns smeared events.
+        """
+
+        def simulate(theta: torch.Tensor) -> torch.Tensor:
+            return self.simulate(
+                theta,
+                device=device,
+                generation_seed=generation_seed,
+                smear_seed=smear_seed,
+            )
+
+        return simulate
+
     @property
     def simulate_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
         """Return a callable bound to this factory; useful for users who expect a simple function."""
-        return lambda theta: self.simulate(theta)
+        return self.create_simulator()

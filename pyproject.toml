@@ -1,12 +1,22 @@
 [project]
-name = "toymc-for-mnpe"
+name = "ToyTwoProngDecay"
 version = "0.1.0"
-description = "a demonstrator for particle physics inspired toy simulator for MNPE"
+description = "Fast approximate two-particle decay simulation with a configurable factory interface"
 readme = "README.md"
 authors = [
     { name = "Peter Steinbach", email = "p.steinbach@hzdr.de" }
 ]
-requires-python = ">=3.13"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+keywords = ["particle-physics", "simulation", "toy-monte-carlo", "unfolding"]
 dependencies = [
     "matplotlib>=3.10.7",
     "numpy>=2.3.3",
@@ -15,16 +25,21 @@ dependencies = [
 ]
 
 [project.scripts]
-toymc-for-mnpe = "toymc_for_mnpe:main"
+ttpd = "ttpd:main"
 
 [[tool.uv.index]]
 url = "https://download.pytorch.org/whl/cpu"
 
 [build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ttpd*"]
+namespaces = false

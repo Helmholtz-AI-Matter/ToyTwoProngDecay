@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from typing import Optional
 
-from toymc_for_mnpe import generator
+from ttpd import generator
 
 
 np.random.seed(42)
@@ -13,9 +13,7 @@ torch.manual_seed(42)
 DEFAULT_DEVICE = generator.DEFAULT_DEVICE
 
 
-def identity_smear(
-    batch: torch.Tensor, seed: torch.Tensor | None = None
-) -> torch.Tensor:
+def identity_smear(batch: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
     """Pass through the inputs unchanged (useful for invariant tests)."""
     return batch
 
@@ -80,6 +78,39 @@ def test_reproducibility_with_seeds() -> None:
     first = factory.simulate(theta, generation_seed=7, smear_seed=17)
     second = factory.simulate(theta, generation_seed=7, smear_seed=17)
     assert torch.allclose(first, second)
+
+
+def test_create_simulator_matches_simulate() -> None:
+    factory = generator.SimulateFactory.create(smear_fn=identity_smear)
+    theta = torch.tensor([[91.1876, 0.0]] * 32, device=DEFAULT_DEVICE)
+
+    simulator = factory.create_simulator(generation_seed=9, smear_seed=19)
+    simulated = simulator(theta)
+    direct = factory.simulate(theta, generation_seed=9, smear_seed=19)
+
+    assert torch.allclose(simulated, direct)
+
+
+def test_create_simulator_device_override() -> None:
+    factory = generator.SimulateFactory.create(smear_fn=identity_smear)
+    theta = torch.tensor([[91.1876, 0.0]] * 16, device=DEFAULT_DEVICE)
+    override_device = torch.device("cpu")
+
+    simulator = factory.create_simulator(
+        generation_seed=13, smear_seed=17, device=override_device
+    )
+    events = simulator(theta)
+
+    assert events.device == override_device
+    assert torch.allclose(
+        events,
+        factory.simulate(
+            theta,
+            generation_seed=13,
+            smear_seed=17,
+            device=override_device,
+        ),
+    )
 
 
 def test_custom_mass_and_smear_affects_pt() -> None:
