@@ -25,9 +25,9 @@
 - `uv build` is also the recommended way to exercise packaging metadata; if you override `uv` defaults, note the override in this file for future agents.
 
 ## Testing
-- `uv test` runs the entire Pytest suite located under `tests/`; it respects the `dev` dependency group and uses whichever interpreter `uv` selects.
-- To focus on a single file, run `uv test tests/test_generator.py` or `python -m pytest tests/test_generator.py` when you need extra Pytest flags.
-- To run a single case, append the node id: `uv test tests/test_generator.py::test_signal_pt_conservation` or use `python -m pytest tests/test_generator.py -k pt_conservation`.
+- `uv run pytest` runs the entire Pytest suite located under `tests/`; it respects the `dev` dependency group and uses whichever interpreter `uv` selects.
+- To focus on a single file, run `uv run pytest tests/test_generator.py` or `python -m pytest tests/test_generator.py` when you need extra Pytest flags.
+- To run a single case, append the node id: `uv run pytest tests/test_generator.py::test_signal_pt_conservation` or use `python -m pytest tests/test_generator.py -k pt_conservation`.
 - Reuse the `DEFAULT_DEVICE` constant from `tests/test_generator.py` when writing new tests so you benefit from the CUDA/CPU fallback already captured there.
 - Seed determinism with `torch.manual_seed` and `np.random.seed`; reset seeds before each test if reproducibility matters for your change.
 - Tests now live in `tests/test_generator.py` and use Pytest signatures and NumPy-style docstrings; refer to that file for examples of how to seed randomness and assert invariants about momentum/invariant mass.
@@ -42,10 +42,12 @@
 - PyTorch distributions (e.g., `torch.distributions.uniform.Uniform`) are already part of the helpers; if you add new samples, keep naming consistent and test the sampling shapes.
 
 ## Linting & formatting
-- This project currently lacks a dedicated linter config, but agents should honor common Python conventions: run `python -m ruff check src tests` or `python -m black --check src tests` if you opt to add such tools.
+- Ruff is part of the `dev` dependency group; run `uv run ruff check src tests` before finishing Python changes.
+- Mypy is part of the `dev` dependency group; run `uv run mypy src/ttpd tests` when you add or modify typed Python code.
 - Keep line length near 88 characters, keep 4-space indentation, and prefer trailing commas in multi-line collections (the existing torch setup in `tests/test_generator.py` already follows these habits).
+- Ruff configuration lives in `pyproject.toml`; notebook artifacts under `src/notebooks` are excluded from linting and type checking.
 - Document any formatter you add by updating this file with how to run it so future agents won’t have to guess the command.
-- When adding new modules, run `python -m ruff check src tests` locally before committing, and treat `uv test` as the final verification step.
+- When adding new modules, run `uv run ruff check src tests` locally before committing, and treat `uv run pytest` as the final verification step.
 
 ## Repository layout & artifacts
 - `pyproject.toml` + `uv.lock` drive dependency resolution and lock PyTorch/NumPy versions required for the simulator.
@@ -75,6 +77,7 @@
 - Annotate every helper with precise return types like `-> torch.Tensor` or `-> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]`.
 - Use `torch.Tensor` explicitly instead of bare `Tensor` or `Any`; document shape expectations in docstrings when necessary.
 - Prefer typed arguments rather than leaving configuration bits untyped; for example, `theta: torch.Tensor` and `device: torch.device` are better than plain `tensor` arguments.
+- Keep newly added production helpers fully typed so `uv run mypy src/ttpd tests` stays clean.
 - Use NumPy-style docstrings for all public helpers (Parameters/Returns sections) so the new generator/tests stay consistent.
 
 ### Documentation & comments
@@ -129,6 +132,7 @@
 ## Documentation & onboarding
 - When you introduce new abstractions (like `TwoProngDecay` or `SimulateFactory`), document their usage both in this guide and via inline docstrings so future agents can rely on nominal behavior.
 - Update the README or add short markdown notes if you expose new CLI commands or dataset-generation scripts.
+- Keep `CONTRIBUTING.md` aligned with the current expectations for tests, linting, version control, and typed Python code.
 - Capture any new physics plots or notebook snippets as documentation under `src/notebooks`; do not merge large binary files without a justification.
 
 ## Reminders for future agents

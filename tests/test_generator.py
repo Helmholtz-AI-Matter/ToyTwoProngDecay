@@ -1,10 +1,14 @@
 """Pytest suite covering the two-prong decay generator."""
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
-from typing import Optional
 
 from ttpd import generator
+
+if TYPE_CHECKING:
+    from ttpd.generator import SmearFn
 
 
 np.random.seed(42)
@@ -13,7 +17,7 @@ torch.manual_seed(42)
 DEFAULT_DEVICE = generator.DEFAULT_DEVICE
 
 
-def identity_smear(batch: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
+def identity_smear(batch: torch.Tensor, _seed: int | None = None) -> torch.Tensor:
     """Pass through the inputs unchanged (useful for invariant tests)."""
     return batch
 
@@ -116,13 +120,14 @@ def test_create_simulator_device_override() -> None:
 def test_custom_mass_and_smear_affects_pt() -> None:
     custom_pt_scale = 0.9
 
-    def custom_smear(batch: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
+    def custom_smear(batch: torch.Tensor, _seed: int | None = None) -> torch.Tensor:
         scaled = batch.clone()
         scaled[:, 0] *= custom_pt_scale
         scaled[:, 4] *= custom_pt_scale
         return scaled
 
-    decay = generator.TwoProngDecay(product_mass=0.211, smear_fn=custom_smear)
+    custom_smear_fn: SmearFn = custom_smear
+    decay = generator.TwoProngDecay(product_mass=0.211, smear_fn=custom_smear_fn)
     theta = torch.tensor([[82.0, 0.0]] * 32, device=DEFAULT_DEVICE)
     events = decay.simulate(theta, generation_seed=5)
     assert torch.allclose(events[:, 0], events[:, 4], atol=1e-4)

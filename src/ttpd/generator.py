@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import TypeAlias
 
 import torch
 
@@ -16,13 +17,20 @@ mZ0 = 91.1876  # GeV
 mMu = 0.105658  # GeV
 """Muon mass used for signal decay products (GeV)."""
 
-SmearFn = Callable[[torch.Tensor, Optional[int]], torch.Tensor]
+TensorQuad: TypeAlias = tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]
+
+SmearFn = Callable[[torch.Tensor, int | None], torch.Tensor]
 """Signature for smear functions (batch, seed) -> smeared batch."""
 
 
 def to_cartesian(
     pt: torch.Tensor, phi: torch.Tensor, eta: torch.Tensor, mass: torch.Tensor
-) -> Tuple[torch.Tensor, ...]:
+) -> TensorQuad:
     """Convert (pt, phi, eta, mass) to (energy, px, py, pz).
 
     Parameters
@@ -38,7 +46,7 @@ def to_cartesian(
 
     Returns
     -------
-    Tuple[torch.Tensor, ...]
+    TensorQuad
         Energy, px, py, pz tensors with the same shape as the inputs.
     """
     pabs = pt * torch.cosh(eta)
@@ -51,7 +59,7 @@ def to_cartesian(
 
 def to_ptphieta(
     energy: torch.Tensor, px: torch.Tensor, py: torch.Tensor, pz: torch.Tensor
-) -> Tuple[torch.Tensor, ...]:
+) -> TensorQuad:
     """Convert (energy, px, py, pz) to (pt, phi, eta, mass).
 
     Parameters
@@ -61,7 +69,7 @@ def to_ptphieta(
 
     Returns
     -------
-    Tuple[torch.Tensor, ...]
+    TensorQuad
         pt, phi, eta, mass tensors with the same shape as the inputs.
     """
     pt = torch.sqrt(px**2 + py**2)
@@ -170,7 +178,7 @@ def _kaellen_function(
 
 
 def default_smear_ptphieta(
-    batch_decay_vectors: torch.Tensor, seed: Optional[int] = None
+    batch_decay_vectors: torch.Tensor, seed: int | None = None
 ) -> torch.Tensor:
     """Apply detector-inspired smearing to decay outputs.
 
@@ -178,7 +186,7 @@ def default_smear_ptphieta(
     ----------
     batch_decay_vectors: torch.Tensor
         Batched decay vectors with shape (B, 8).
-    seed: Optional[int]
+    seed: int | None
         Optional torch manual seed for reproducibility.
 
     Returns
@@ -243,19 +251,21 @@ class TwoProngDecay:
     def generate(
         self,
         theta: torch.Tensor,
-        device: Optional[torch.device] = None,
-        seed: Optional[int] = None,
+        device: torch.device | None = None,
+        seed: int | None = None,
     ) -> torch.Tensor:
         """Generate unsmeared decay kinematics for each theta entry.
 
         Parameters
         ----------
         theta: torch.Tensor
-            Tensor of shape (N, 2) where theta[:, 0] is the parent mass and theta[:, 1] is the signal/background flag.
-        device: Optional[torch.device]
+            Tensor of shape ``(N, 2)`` where ``theta[:, 0]`` is the parent
+            mass and ``theta[:, 1]`` is the signal/background flag.
+        device: torch.device | None
             Optional override for the target device.
-        seed: Optional[int]
-            Optional torch seed used for sampling; reused for all internal distributions.
+        seed: int | None
+            Optional torch seed used for sampling; reused for all internal
+            distributions.
 
         Returns
         -------
@@ -272,7 +282,8 @@ class TwoProngDecay:
         Mtot = theta[:, 0].unsqueeze(-1)
         Mdecay = torch.tensor(self.product_mass, device=target_device)
 
-        # compute momentum magnitude using the Källén function for a 2-body decay at rest
+        # compute momentum magnitude using the Kallen function for a 2-body
+        # decay at rest
         ptotal = (1.0 / (2.0 * Mtot)) * torch.sqrt(
             _kaellen_function(Mtot**2, Mdecay**2, Mdecay**2)
         )
@@ -333,14 +344,14 @@ class TwoProngDecay:
 
         return torch.hstack([mu1, mu2])
 
-    def smear(self, events: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
+    def smear(self, events: torch.Tensor, seed: int | None = None) -> torch.Tensor:
         """Apply the configured smear function to the generated events.
 
         Parameters
         ----------
         events: torch.Tensor
             Batched decay vectors with shape (B, 8).
-        seed: Optional[int]
+        seed: int | None
             Optional seed passed to the smear function.
 
         Returns
@@ -353,9 +364,9 @@ class TwoProngDecay:
     def simulate(
         self,
         theta: torch.Tensor,
-        device: Optional[torch.device] = None,
-        generation_seed: Optional[int] = None,
-        smear_seed: Optional[int] = None,
+        device: torch.device | None = None,
+        generation_seed: int | None = None,
+        smear_seed: int | None = None,
     ) -> torch.Tensor:
         """Generate and smear decay events from theta.
 
@@ -363,11 +374,11 @@ class TwoProngDecay:
         ----------
         theta: torch.Tensor
             Input theta array shaped (N, 2).
-        device: Optional[torch.device]
+        device: torch.device | None
             Optional device override for the generation step.
-        generation_seed: Optional[int]
+        generation_seed: int | None
             Seed used during kinematic sampling.
-        smear_seed: Optional[int]
+        smear_seed: int | None
             Seed used when smearing the produced events.
 
         Returns
@@ -391,7 +402,7 @@ class SimulateFactory:
         product_mass: float = mMu,
         smear_fn: SmearFn = default_smear_ptphieta,
         device: torch.device = DEFAULT_DEVICE,
-    ) -> "SimulateFactory":
+    ) -> SimulateFactory:
         """Create a factory with a new TwoProngDecay instance."""
         return cls(
             decay=TwoProngDecay(
@@ -402,9 +413,9 @@ class SimulateFactory:
     def simulate(
         self,
         theta: torch.Tensor,
-        device: Optional[torch.device] = None,
-        generation_seed: Optional[int] = None,
-        smear_seed: Optional[int] = None,
+        device: torch.device | None = None,
+        generation_seed: int | None = None,
+        smear_seed: int | None = None,
     ) -> torch.Tensor:
         """Callable that mirrors the notebook simulate interface.
 
@@ -412,11 +423,11 @@ class SimulateFactory:
         ----------
         theta: torch.Tensor
             Input tensor describing masses and signal/background flags.
-        device: Optional[torch.device]
+        device: torch.device | None
             Optional override for generation.
-        generation_seed: Optional[int]
+        generation_seed: int | None
             Optional seed for kinematic sampling.
-        smear_seed: Optional[int]
+        smear_seed: int | None
             Optional seed for the smear function.
 
         Returns
@@ -433,20 +444,20 @@ class SimulateFactory:
 
     def create_simulator(
         self,
-        generation_seed: Optional[int] = None,
-        smear_seed: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        generation_seed: int | None = None,
+        smear_seed: int | None = None,
+        device: torch.device | None = None,
     ) -> Callable[[torch.Tensor], torch.Tensor]:
         """Return a simulator callable that reuses this factory's decay.
 
         Parameters
         ----------
-        generation_seed: Optional[int]
+        generation_seed: int | None
             Optional seed passed to `self.simulate` so the generated kinematics
             stay deterministic when the callable is reused.
-        smear_seed: Optional[int]
+        smear_seed: int | None
             Optional seed passed to the smear function.
-        device: Optional[torch.device]
+        device: torch.device | None
             Optional override for the generation device; defaults to the factory's
             own device if ``None``.
 
@@ -468,5 +479,5 @@ class SimulateFactory:
 
     @property
     def simulate_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
-        """Return a callable bound to this factory; useful for users who expect a simple function."""
+        """Return a callable bound to this factory for function-style use."""
         return self.create_simulator()

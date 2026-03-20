@@ -20,7 +20,6 @@ keywords = ["particle-physics", "simulation", "toy-monte-carlo", "unfolding"]
 dependencies = [
     "matplotlib>=3.10.7",
     "numpy>=2.3.3",
-    "sbi==0.25.0",
     "torch<2.6",
 ]
 
@@ -36,8 +35,26 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "mypy>=1.18.2",
     "pytest>=9.0.2",
+    "ruff>=0.13.0",
+    "sbi==0.25.0",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["src/notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/ttpd", "tests"]
+exclude = ["^src/notebooks/"]
+disallow_untyped_defs = true
+check_untyped_defs = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
