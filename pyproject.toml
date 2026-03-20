@@ -49,6 +49,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "marimo>=0.21.1",
     "mypy>=1.18.2",
     "pytest>=9.0.2",
     "ruff>=0.13.0",
