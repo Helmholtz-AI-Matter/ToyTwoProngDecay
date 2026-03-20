@@ -11,10 +11,10 @@ import torch
 DEFAULT_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 """Default device for generators (GPU if available, CPU otherwise)."""
 
-mZ0 = 91.1876  # GeV
+mZ0 = 91.1876  # GeV, TODO perhaps retrieve this from pdg
 """Z boson mass used in signal generation (GeV)."""
 
-mMu = 0.105658  # GeV
+mMu = 0.105658  # GeV, TODO perhaps retrieve this from pdg
 """Muon mass used for signal decay products (GeV)."""
 
 TensorQuad: TypeAlias = tuple[
@@ -115,7 +115,7 @@ def ptphieta_to_epxyz(batch_decay_vectors: torch.Tensor) -> torch.Tensor:
 
 
 def invariant_mass_from_epxyz(
-    batch_decay_vectors: torch.Tensor, common_mass: float = mMu
+    batch_decay_vectors: torch.Tensor, prong_mass: float = mMu
 ) -> torch.Tensor:
     """Calculate invariant mass from energy/momentum vectors.
 
@@ -123,6 +123,10 @@ def invariant_mass_from_epxyz(
     ----------
     batch_decay_vectors: torch.Tensor
         Batched vectors with shape (B, 8) representing two particles.
+        Encoding is expected as:
+        mu1e, mu1px, mu1py, mu1pz, mu2e, mu2px, mu2py, mu2pz
+    prong_mass: float
+        mass of the decay product to reconstruct mass from
 
     Returns
     -------
@@ -131,18 +135,24 @@ def invariant_mass_from_epxyz(
     """
     mu1e, mu1px, mu1py, mu1pz = list(range(4))
     mu2e, mu2px, mu2py, mu2pz = list(range(4, 8))
+
     mu1E = batch_decay_vectors[:, mu1e]
     mu2E = batch_decay_vectors[:, mu2e]
+
     mu1Px = batch_decay_vectors[:, mu1px]
     mu2Px = batch_decay_vectors[:, mu2px]
+
     mu1Py = batch_decay_vectors[:, mu1py]
     mu2Py = batch_decay_vectors[:, mu2py]
+
     mu1Pz = batch_decay_vectors[:, mu1pz]
     mu2Pz = batch_decay_vectors[:, mu2pz]
+
     value = torch.zeros(
         [batch_decay_vectors.shape[0], 1], device=batch_decay_vectors.device
     )
-    value[:, 0] = 2 * (common_mass**2)
+
+    value[:, 0] = 2 * (prong_mass**2)
     value[:, 0] += 2 * (mu1E * mu2E)
     value[:, 0] -= 2 * (mu1Px * mu2Px + mu1Py * mu2Py + mu1Pz * mu2Pz)
     return torch.sqrt(value)
@@ -155,6 +165,8 @@ def invariant_mass_from_ptphieta(batch_decay_vectors: torch.Tensor) -> torch.Ten
     ----------
     batch_decay_vectors: torch.Tensor
         Batched vectors with shape (B, 8).
+        Encoding is expected as:
+        [mu1 pt, mu1 phi, mu1 eta, mu1 mass, mu2 pt, mu2 phi, mu2 eta, mu2 mass]
 
     Returns
     -------
@@ -193,6 +205,9 @@ def default_smear_ptphieta(
     -------
     torch.Tensor
         Smeared decay vectors with the same shape as the input.
+
+    some inspiration was taken from
+    [1] https://ar5iv.labs.arxiv.org/html/2212.07338
     """
     device = batch_decay_vectors.device
     generator = torch.Generator(device=device)
@@ -203,6 +218,8 @@ def default_smear_ptphieta(
     mu2pt, mu2phi, mu2eta = 4, 5, 6
 
     value = batch_decay_vectors.clone()
+
+    #uniform range approximated from [1] fig 10
     sigmas = (
         torch.rand(value.shape[0], generator=generator, device=device) * 0.03 + 0.01
     )
@@ -222,6 +239,7 @@ def default_smear_ptphieta(
         generator=generator,
     )
     value[:, mu1phi] *= phi_smear
+    # reverse phi_smear
     value[:, mu2phi] *= torch.flip(phi_smear, dims=(0,))
 
     eta_smear = torch.normal(
@@ -230,6 +248,7 @@ def default_smear_ptphieta(
         generator=generator,
     )
     value[:, mu1eta] *= eta_smear
+    # reverse phi_smear
     value[:, mu2eta] *= torch.flip(eta_smear, dims=(0,))
 
     return value
@@ -254,13 +273,16 @@ class TwoProngDecay:
         device: torch.device | None = None,
         seed: int | None = None,
     ) -> torch.Tensor:
-        """Generate unsmeared decay kinematics for each theta entry.
+        """Generate unsmeared decay kinematics for each theta entry. Use
+        section 49.4.2 of PDG booklet for kinematics algebra.
 
         Parameters
         ----------
         theta: torch.Tensor
             Tensor of shape ``(N, 2)`` where ``theta[:, 0]`` is the parent
-            mass and ``theta[:, 1]`` is the signal/background flag.
+            mass and ``theta[:, 1]`` is the signal/background flag (`0` is
+            assumed to represent signal and `1` is assumed to represent
+            background)
         device: torch.device | None
             Optional override for the target device.
         seed: int | None
@@ -289,10 +311,12 @@ class TwoProngDecay:
         )
 
         # sample isotropic directions for the first prong
+        # uniform distribution from [-1,1]
         cos_theta1 = -1.0 + 2.0 * torch.rand(
             (n_samples, 1), generator=generator, device=target_device
         )
         sin_theta1 = torch.sqrt(1.0 - cos_theta1**2)
+        # uniform distribution from [0,2pi]
         phi1 = (
             2.0
             * torch.pi
@@ -307,6 +331,7 @@ class TwoProngDecay:
         pt1, phi1, eta1, mass1 = to_ptphieta(en1, px1, py1, pz1)
 
         mu1 = torch.hstack([pt1, phi1, eta1, mass1])
+        assert mu1.shape == torch.Size([n_samples, 4]), "mu1 shape mismatch"
 
         # the second prong is emitted back-to-back in the parent rest frame
         en2 = torch.clone(en1)
@@ -315,7 +340,6 @@ class TwoProngDecay:
         pz2 = -pz1
         pt2, phi2, eta2, mass2 = to_ptphieta(en2, px2, py2, pz2)
 
-        assert mu1.shape == torch.Size([n_samples, 4]), "mu1 shape mismatch"
         assert pt2.shape == pt1.shape, "pt mismatch"
 
         # add background offsets only when theta[:, 1] > 0
@@ -323,6 +347,7 @@ class TwoProngDecay:
             (n_samples,), generator=generator, device=target_device
         )
         background_pt_offset *= 0.25
+
         background_phi_offset = theta[:, 1] * torch.normal(
             mean=torch.zeros(n_samples, device=target_device),
             std=torch.pi / 4,

@@ -26,7 +26,7 @@ def test_simulate_shape_and_finite() -> None:
     factory = generator.SimulateFactory.create(
         product_mass=generator.mMu, smear_fn=identity_smear
     )
-    theta = torch.tensor([[91.1876, 0.0], [91.1876, 1.0]], device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0], [generator.mZ0, 1.0]], device=DEFAULT_DEVICE)
     output = factory.simulate(theta, generation_seed=10, smear_seed=20)
     assert output.shape == (2, 8)
     assert output.device == theta.device
@@ -35,7 +35,7 @@ def test_simulate_shape_and_finite() -> None:
 
 def test_signal_back_to_back_phi() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
-    theta = torch.tensor([[91.1876, 0.0]] * 128, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 128, device=DEFAULT_DEVICE)
     events = factory.simulate(theta, generation_seed=123, smear_seed=456)
     phi1 = events[:, 1]
     phi2 = events[:, 5]
@@ -45,7 +45,7 @@ def test_signal_back_to_back_phi() -> None:
 
 def test_signal_pt_and_pz_conservation() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
-    theta = torch.tensor([[91.1876, 0.0]] * 256, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 256, device=DEFAULT_DEVICE)
     events = factory.simulate(theta, generation_seed=321, smear_seed=654)
     pt1, phi1 = events[:, 0], events[:, 1]
     pt2, phi2 = events[:, 4], events[:, 5]
@@ -61,16 +61,18 @@ def test_signal_pt_and_pz_conservation() -> None:
 
 def test_signal_invariant_mass_matches_theta() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
-    theta = torch.tensor([[91.1876, 0.0]] * 512, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 512, device=DEFAULT_DEVICE)
+
     events = factory.simulate(theta, generation_seed=111, smear_seed=222)
     invariant_mass = generator.invariant_mass_from_ptphieta(events)
+
     assert invariant_mass.shape == theta[:, 0].unsqueeze(1).shape
     assert torch.allclose(invariant_mass, theta[:, 0].unsqueeze(1), atol=1e-4)
 
 
 def test_background_not_back_to_back() -> None:
     factory = generator.SimulateFactory.create()
-    theta = torch.tensor([[91.1876, 1.0]] * 256, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 1.0]] * 256, device=DEFAULT_DEVICE)
     events = factory.simulate(theta, generation_seed=11, smear_seed=13)
     dphi = torch.abs(events[:, 5] - events[:, 1])
     assert not torch.allclose(dphi, torch.full_like(dphi, torch.pi), atol=1e-3)
@@ -78,15 +80,47 @@ def test_background_not_back_to_back() -> None:
 
 def test_reproducibility_with_seeds() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
-    theta = torch.tensor([[91.1876, 0.0]] * 64, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 64, device=DEFAULT_DEVICE)
     first = factory.simulate(theta, generation_seed=7, smear_seed=17)
     second = factory.simulate(theta, generation_seed=7, smear_seed=17)
     assert torch.allclose(first, second)
 
 
+def test_reconstructed_mass() -> None:
+    factory = generator.SimulateFactory.create(smear_fn=identity_smear)
+
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 64, device=DEFAULT_DEVICE)
+
+    x = factory.simulate(theta, generation_seed=7, smear_seed=17)
+
+    masses = generator.invariant_mass_from_ptphieta(x)
+
+    assert (masses > generator.mZ0/2.).all()
+    assert (masses > 3*generator.mZ0/4.).all()
+    assert torch.allclose(masses,theta[:,0])
+
+def test_reconstructed_mass_from_cauchy() -> None:
+    factory = generator.SimulateFactory.create(smear_fn=identity_smear)
+
+    zpdf = torch.distributions.Cauchy(loc=generator.mZ0,scale=0.001)
+    theta = torch.hstack([
+        zpdf.sample((128,1)),
+        torch.zeros((128,1))
+        ]
+    )
+
+    x = factory.simulate(theta, generation_seed=7, smear_seed=17)
+
+    masses = generator.invariant_mass_from_ptphieta(x)
+
+    assert (masses > generator.mZ0/2.).all()
+    assert (masses > 3*generator.mZ0/4.).all()
+    assert torch.allclose(masses,theta[:,0],atol=1)
+
+
 def test_create_simulator_matches_simulate() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
-    theta = torch.tensor([[91.1876, 0.0]] * 32, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 32, device=DEFAULT_DEVICE)
 
     simulator = factory.create_simulator(generation_seed=9, smear_seed=19)
     simulated = simulator(theta)
@@ -97,7 +131,7 @@ def test_create_simulator_matches_simulate() -> None:
 
 def test_create_simulator_device_override() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
-    theta = torch.tensor([[91.1876, 0.0]] * 16, device=DEFAULT_DEVICE)
+    theta = torch.tensor([[generator.mZ0, 0.0]] * 16, device=DEFAULT_DEVICE)
     override_device = torch.device("cpu")
 
     simulator = factory.create_simulator(
