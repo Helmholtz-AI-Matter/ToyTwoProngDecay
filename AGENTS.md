@@ -43,11 +43,11 @@
 - Tests now live in `tests/test_generator.py` and use Pytest signatures and NumPy-style docstrings; refer to that file for examples of how to seed randomness and assert invariants about momentum/invariant mass.
 
 ## Generator & simulation
-- `src/ttpd/generator.py` now hosts the physics helpers (`to_cartesian`, `to_ptphieta`, `ptphieta_to_epxyz`, `invariant_mass_from_epxyz`, etc.) plus the abstractions `TwoProngDecay` and the `SimulateFactory` dataclass.
+- `src/ttpd/kinematics.py` now hosts the physics helpers (`to_cartesian`, `to_ptphieta`, `ptphieta_to_epxyz`, `invariant_mass_from_epxyz`, etc.) plus the shared constants `mZ0` and `mMu`, while `src/ttpd/generator.py` keeps the abstractions `TwoProngDecay` and the `SimulateFactory` dataclass.
 - `TwoProngDecay` exposes `generate`, `smear`, and `simulate` methods with configurable product mass, smearing function, device placement, and optional seeds to keep samplers deterministic.
 - The default smearing function mirrors the notebook’s `smear_ptphieta` (pt/dphi/eta jitter, independent phi/eta resets); inject a custom callable when you need a different detector model.
 - `SimulateFactory.create(...)` returns a dataclass that keeps the `TwoProngDecay` instance on the `decay` attribute while providing the single-argument `simulate(theta)` callable shown in the notebook. Pass `generation_seed`/`smear_seed` through the factory to reproduce specific draws or share random states across runs.
-- When updating this module, maintain NumPy-style docstrings and keep helper exports stable so that notebooks/tests relying on `to_ptphieta` or `invariant_mass_from_ptphieta` continue working.
+- When updating these modules, maintain NumPy-style docstrings and keep helper exports stable so that notebooks/tests relying on `to_ptphieta` or `invariant_mass_from_ptphieta` continue working.
 - When tests need to target CPU-only or GPU-specific behavior, pass `device=DEFAULT_DEVICE` explicitly and document the assumption in the test docstring comment.
 - PyTorch distributions (e.g., `torch.distributions.uniform.Uniform`) are already part of the helpers; if you add new samples, keep naming consistent and test the sampling shapes.
 

@@ -30,11 +30,8 @@ def _():
     import matplotlib.pyplot as plt
     import torch
 
-    from ttpd.generator import (
-        SimulateFactory,
-        invariant_mass_from_ptphieta,
-        mZ0,
-    )
+    from ttpd.generator import SimulateFactory
+    from ttpd.kinematics import invariant_mass_from_ptphieta, mZ0
 
     # create simulator factory
     factory = SimulateFactory.create(device=torch.device("cpu"))
@@ -134,23 +131,25 @@ def _(mZ0, torch):
     num_signal = 5_000
     num_backgd = 1_000
     theta_ids = torch.concat(
-        [torch.zeros((num_signal,1)), torch.ones((num_backgd,1))]
+        [torch.zeros((num_signal, 1)), torch.ones((num_backgd, 1))]
     )
 
     # prepare pdf or prior for each channel
-    signal_pdf = torch.distributions.Cauchy(loc=mZ0, scale=.05)
-    backgd_pdf = torch.distributions.Uniform(mZ0-30,mZ0+30)
+    signal_pdf = torch.distributions.Cauchy(loc=mZ0, scale=0.05)
+    backgd_pdf = torch.distributions.Uniform(mZ0 - 30, mZ0 + 30)
     theta_masses = torch.concat(
-        [signal_pdf.sample((num_signal,1)), backgd_pdf.sample((num_backgd,1))]
+        [signal_pdf.sample((num_signal, 1)), backgd_pdf.sample((num_backgd, 1))]
     )
 
     # join everything into one tensor
     thetas = torch.hstack([theta_masses, theta_ids])
 
     # what it looks like
-    print(f"created simulation parameter samples of shape {thetas.shape} and type {thetas.dtype}\n")
-    print(f"the first entries contain signal 'events'\n{thetas[:5,...]}")
-    print(f"the last entries contain background 'events'\n{thetas[-5:,...]}")
+    print(
+        f"created simulation parameter samples of shape {thetas.shape} and type {thetas.dtype}\n"
+    )
+    print(f"the first entries contain signal 'events'\n{thetas[:5, ...]}")
+    print(f"the last entries contain background 'events'\n{thetas[-5:, ...]}")
     return num_backgd, num_signal, thetas
 
 
@@ -172,22 +171,25 @@ def _(
     torch,
     xs,
 ):
-    # let's inspect 
+    # let's inspect
     figa, axesa = plt.subplots(1, 2, figsize=(12, 6), tight_layout=True)
     masses_ = invariant_mass_from_ptphieta(xs)
 
-    axesa[0].hist([thetas[:num_signal,0], thetas[-num_backgd:,0]], 
-                  bins=torch.arange(mZ0-20,mZ0+20,1), 
-                  stacked=True,
-                  label=["signal","background"]
-                 )
+    axesa[0].hist(
+        [thetas[:num_signal, 0], thetas[-num_backgd:, 0]],
+        bins=torch.arange(mZ0 - 20, mZ0 + 20, 1),
+        stacked=True,
+        label=["signal", "background"],
+    )
     axesa[0].set_title("Prior/generated mass")
     axesa[0].set_xlabel("Mass / GeV")
 
-    axesa[1].hist([masses_[:num_signal,0], masses_[-num_backgd:,0]], 
-                  bins=torch.arange(mZ0-20,mZ0+20,1), 
-                  stacked=True,
-                  label=["signal","background"])
+    axesa[1].hist(
+        [masses_[:num_signal, 0], masses_[-num_backgd:, 0]],
+        bins=torch.arange(mZ0 - 20, mZ0 + 20, 1),
+        stacked=True,
+        label=["signal", "background"],
+    )
     axesa[1].set_title("invariant mass from smeared events")
     axesa[1].set_xlabel("Mass / GeV")
     axesa[1].legend()

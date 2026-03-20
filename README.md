@@ -53,7 +53,8 @@ uv add ToyTwoProngDecay
 ```python
 import torch
 
-from ttpd.generator import SimulateFactory, invariant_mass_from_ptphieta, mZ0
+from ttpd.generator import SimulateFactory
+from ttpd.kinematics import invariant_mass_from_ptphieta, mZ0
 
 factory = SimulateFactory.create(device=torch.device("cpu"))
 theta = torch.tensor([[mZ0, 0.0], [85.0, 1.0]])
