@@ -17,6 +17,9 @@ two-prong decays for method-development studies such as unfolding.
 
 ## Installation
 
+`ToyTwoProngDecay` aims to support both `uv`-based workflows and plain
+`python`/`pip` workflows.
+
 From a local checkout with plain `pip`:
 
 ```bash
@@ -27,6 +30,15 @@ From a local checkout with `uv`:
 
 ```bash
 uv sync --all-groups
+```
+
+For plain Python development setup with a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e '.[dev]'
 ```
 
 Once published on PyPI, installation will also work as:
@@ -58,6 +70,13 @@ The `theta` tensor uses two columns:
 
 - CLI entry point: `ttpd`
 - Package import: `ttpd`
-- Run tests locally: `uv run pytest`
+- Install dev dependencies with `uv`: `uv sync --all-groups`
+- Install dev dependencies with `pip`: `python -m pip install -e '.[dev]'`
+- Run tests with `uv`: `uv run pytest`
+- Run tests with plain Python: `python -m pytest`
+- Run Ruff with `uv`: `uv run ruff check src tests`
+- Run Ruff with plain Python: `python -m ruff check src tests`
+- Run mypy with `uv`: `uv run mypy src/ttpd tests`
+- Run mypy with plain Python: `python -m mypy src/ttpd tests`
 - GitHub Actions runs the unit test suite on every push and pull request for
   Python `3.11`, `3.12`, and `3.13`

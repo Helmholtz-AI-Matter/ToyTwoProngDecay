@@ -23,6 +23,14 @@ dependencies = [
     "torch<2.6",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.18.2",
+    "pytest>=9.0.2",
+    "ruff>=0.13.0",
+    "sbi==0.25.0",
+]
+
 [project.scripts]
 ttpd = "ttpd:main"
 

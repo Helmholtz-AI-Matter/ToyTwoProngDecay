@@ -12,13 +12,15 @@
 - Python 3.11 or newer is required per `pyproject.toml`; prefer to recreate a local interpreter with `python -m venv .venv` or reuse `py313` by running `source py313/bin/activate`.
 - Upgrade pip/setuptools before installing dependencies: `python -m pip install --upgrade pip setuptools wheel`.
 - Install runtime and dev requirements with `uv sync --all-groups` (it reads `pyproject.toml` and `uv.lock`).
+- Plain `pip` workflows should also work: use `python -m pip install .` for runtime installs or `python -m pip install -e '.[dev]'` for editable development installs.
 - For repeatable shells, keep `uv.lock` in sync and rerun `uv sync --all-groups` whenever dependencies change.
 - After every dependency change, rerun `uv lock` and `uv sync --all-groups`, verify `uv.lock`, and commit both `pyproject.toml`/`uv.lock` together so the lock file never lags.
-- Source installs should work with both `pip install .` and `uv sync --all-groups`; keep both paths working when changing packaging metadata.
+- This project aspires to support both `uv` workflows and plain `python`/`pip` workflows; keep both paths working when changing packaging metadata or contributor docs.
 - Activate the same interpreter you use for CI/UV (`py313/bin/activate`) before invoking tests or builds, which keeps CUDA/CPU detection consistent.
 
 ## Build, packaging, and execution
 - `uv build` produces a wheel or sdist depending on the `uv` defaults; inspect `dist/` afterwards to verify metadata.
+- `python -m build` is the plain-Python alternative for producing sdists and wheels; use it when verifying the non-`uv` packaging path.
 - `uv run ttpd` launches the CLI entry point defined under `[project.scripts]`; `python -m ttpd` is the matching module entry point if you add one later.
 - `uv run --` lets you pass arbitrary commands through the `uv` shim; e.g., `uv run -- python -m module` picks up the locked interpreter and dependencies from this workspace.
 - Treat artifacts under `src/notebooks` as documentation: rerun them locally, then export new HTML/JSON when the narrative needs updating.
@@ -43,11 +45,13 @@
 
 ## Linting & formatting
 - Ruff is part of the `dev` dependency group; run `uv run ruff check src tests` before finishing Python changes.
+- The plain-Python alternative is `python -m ruff check src tests`; keep it working for contributors who do not use `uv`.
 - Mypy is part of the `dev` dependency group; run `uv run mypy src/ttpd tests` when you add or modify typed Python code.
+- The plain-Python alternative is `python -m mypy src/ttpd tests`; keep it working alongside the `uv` path.
 - Keep line length near 88 characters, keep 4-space indentation, and prefer trailing commas in multi-line collections (the existing torch setup in `tests/test_generator.py` already follows these habits).
 - Ruff configuration lives in `pyproject.toml`; notebook artifacts under `src/notebooks` are excluded from linting and type checking.
 - Document any formatter you add by updating this file with how to run it so future agents won’t have to guess the command.
-- When adding new modules, run `uv run ruff check src tests` locally before committing, and treat `uv run pytest` as the final verification step.
+- When adding new modules, run `uv run ruff check src tests` or `python -m ruff check src tests` locally before committing, and treat `uv run pytest` or `python -m pytest` as the final verification step.
 
 ## Repository layout & artifacts
 - `pyproject.toml` + `uv.lock` drive dependency resolution and lock PyTorch/NumPy versions required for the simulator.
