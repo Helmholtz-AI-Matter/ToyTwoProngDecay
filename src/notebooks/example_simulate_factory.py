@@ -38,9 +38,16 @@ def _():
     return factory, invariant_mass_from_ptphieta, mZ0, plt, torch
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Now, let's generate some signal and background prior samples.
+    """)
+    return
+
+
 @app.cell
 def _(mZ0, torch):
-    # generate signal and background prior samples
     signal_theta = torch.hstack([torch.full((16, 1), mZ0), torch.zeros((16, 1))])
     background_theta_1 = torch.hstack(
         [
@@ -62,37 +69,50 @@ def _(mZ0, torch):
 def _(mo):
     mo.md(r"""
     ## Generate events and inspect reconstructed masses
-    The simulator is seeded so the notebook always produces the same example
-    batch when the documentation site is rebuilt.
+
+    We now bootstrap the simulate function from the factory object. This has the benefit that we can integrate useful parameters like seeds or smearing functions or target devices into the simulate call directly.
     """)
     return
 
 
 @app.cell
-def _(factory, invariant_mass_from_ptphieta, plt, theta, torch):
+def _(factory, theta, torch):
 
     simulate = factory.create_simulator(
         generation_seed=123, smear_seed=321, device=torch.device("cpu")
     )
     events = simulate(theta)
+    print("batch shape:", events.shape)
+    print("prior labels:", theta[:, 1].unique())
+
+    return events, simulate
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    The simulate function returns 4-vectors of the two decay prongs only. We can now continue and calculate the invariant masses of the events provided.
+    """)
+    return
+
+
+@app.cell
+def _(events, invariant_mass_from_ptphieta, plt, theta):
     masses = invariant_mass_from_ptphieta(events)
     delta = masses - theta[:, 0].unsqueeze(1)
 
-    print("batch shape:", events.shape)
-    print("prior labels:", theta[:, 1].unique())
     print("first 5 reconstructed masses:", masses[:5].flatten())
     print("delta mean:", delta.mean().item())
 
     plt.close("all")
-    return masses, simulate
+    return (masses,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Compare prior and reconstructed spectra
-    The final plot compares the sampled parent-mass prior with the reconstructed
-    invariant masses obtained from the smeared decay products.
+    The following plot compares the sampled parent-mass prior with the reconstructed invariant masses obtained from the smeared decay products.
     """)
     return
 
@@ -120,7 +140,7 @@ def _(mo):
     mo.md(r"""
     ## More real world generation
 
-    In the cell below, we generate a set of signal events and one background channel. For each channel, we can select a distribution of mass values, but have to assign the channel ID by virtue of an integer.
+    In the cell below, we generate a set of signal events and one background channel only. For each channel, we select a distribution of mass values, but have to assign the channel ID by virtue of an integer (`0` for signal, `1` for background).
     """)
     return
 
@@ -143,14 +163,26 @@ def _(mZ0, torch):
 
     # join everything into one tensor
     thetas = torch.hstack([theta_masses, theta_ids])
+    return num_backgd, num_signal, thetas
 
+
+@app.cell
+def _(thetas):
     # what it looks like
     print(
-        f"created simulation parameter samples of shape {thetas.shape} and type {thetas.dtype}\n"
+        f"created simulation parameter samples of shape {thetas.shape}\n and type {thetas.dtype}\n"
     )
     print(f"the first entries contain signal 'events'\n{thetas[:5, ...]}")
     print(f"the last entries contain background 'events'\n{thetas[-5:, ...]}")
-    return num_backgd, num_signal, thetas
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Now, we can go forward and generate some observations `xs`.
+    """)
+    return
 
 
 @app.cell
@@ -194,6 +226,14 @@ def _(
     axesa[1].set_xlabel("Mass / GeV")
     axesa[1].legend()
     figa
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    The above plot shows the generated samples (left) and smeared+reconstructed on the right. We see that the cauchy distribution has become wider as we smeared the kinematics of the decay products.
+    """)
     return
 
 
