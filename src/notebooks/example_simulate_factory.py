@@ -21,6 +21,17 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Configure the simulator
+    The first step is to import the physics helpers and instantiate a
+    `SimulateFactory` on CPU so the example remains reproducible across local and
+    CI documentation builds.
+    """)
+    return
+
+
 @app.cell
 def _():
     import matplotlib.pyplot as plt
@@ -59,6 +70,16 @@ def _(mZ0, torch):
     return (theta,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Generate events and inspect reconstructed masses
+    The simulator is seeded so the notebook always produces the same example
+    batch when the documentation site is rebuilt.
+    """)
+    return
+
+
 @app.cell
 def _(factory, invariant_mass_from_ptphieta, plt, theta, torch):
 
@@ -78,12 +99,21 @@ def _(factory, invariant_mass_from_ptphieta, plt, theta, torch):
     return delta, masses
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Compare prior and reconstructed spectra
+    The final plot compares the sampled parent-mass prior with the reconstructed
+    invariant masses obtained from the smeared decay products.
+    """)
+    return
+
+
 @app.cell
 def _(delta, masses, plt, theta):
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), tight_layout=True)
     prior = theta[:, 0].numpy()
     obs = masses.flatten().numpy()
-    delta_vals = delta.flatten().numpy()
 
     axes[0].hist(prior, bins=20, color="tab:blue", alpha=0.7)
     axes[0].set_title("Prior mass (theta[:,0])")

@@ -13,3 +13,5 @@ wheels/
 *html
 *pdf
 sbi-logs
+site/
+docs/notebooks/*.ipynb

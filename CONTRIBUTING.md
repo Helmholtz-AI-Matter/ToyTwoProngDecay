@@ -27,8 +27,36 @@ Or with plain Python and pip:
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e '.[dev]'
+python -m pip install -e '.[dev,docs]'
 ```
+
+## Build docs locally
+
+The documentation site is notebook-driven. Marimo notebooks under
+`src/notebooks/*.py` are the canonical source, and the published site only
+includes a curated subset of them. Generated `ipynb` files under
+`docs/notebooks/` are build artifacts and should not be committed.
+
+Build the docs locally with `uv`:
+
+```bash
+uv run python scripts/build_docs.py build
+```
+
+Preview the docs locally with a live server:
+
+```bash
+uv run python scripts/build_docs.py serve
+```
+
+Or with plain Python:
+
+```bash
+python scripts/build_docs.py build
+python scripts/build_docs.py serve
+```
+
+The local preview defaults to `http://127.0.0.1:8000`.
 
 Before submitting changes, run:
 

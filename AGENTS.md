@@ -12,7 +12,7 @@
 - Python 3.11 or newer is required per `pyproject.toml`; prefer to recreate a local interpreter with `python -m venv .venv` or reuse `py313` by running `source py313/bin/activate`.
 - Upgrade pip/setuptools before installing dependencies: `python -m pip install --upgrade pip setuptools wheel`.
 - Install runtime and dev requirements with `uv sync --all-groups` (it reads `pyproject.toml` and `uv.lock`).
-- Plain `pip` workflows should also work: use `python -m pip install .` for runtime installs or `python -m pip install -e '.[dev]'` for editable development installs.
+- Plain `pip` workflows should also work: use `python -m pip install .` for runtime installs or `python -m pip install -e '.[dev,docs]'` for editable development installs.
 - For repeatable shells, keep `uv.lock` in sync and rerun `uv sync --all-groups` whenever dependencies change.
 - After every dependency change, rerun `uv lock` and `uv sync --all-groups`, verify `uv.lock`, and commit both `pyproject.toml`/`uv.lock` together so the lock file never lags.
 - This project aspires to support both `uv` workflows and plain `python`/`pip` workflows; keep both paths working when changing packaging metadata or contributor docs.
@@ -25,6 +25,14 @@
 - `uv run --` lets you pass arbitrary commands through the `uv` shim; e.g., `uv run -- python -m module` picks up the locked interpreter and dependencies from this workspace.
 - Treat artifacts under `src/notebooks` as documentation: rerun them locally, then export new HTML/JSON when the narrative needs updating.
 - `uv build` is also the recommended way to exercise packaging metadata; if you override `uv` defaults, note the override in this file for future agents.
+
+## Documentation site
+- The GitHub Pages site is notebook-driven: canonical sources live in `src/notebooks/*.py`, with marimo notebooks acting as the authoritative docs source.
+- The initial public docs build currently includes only `src/notebooks/example_simulate_factory.py`; do not publish `src/notebooks/mnpe-demo.py`, `src/notebooks/toy2decay-simulator.py`, or their derived artifacts unless the docs scope changes.
+- Generated notebook artifacts under `docs/notebooks/*.ipynb` are temporary build outputs for MkDocs and must not be committed.
+- Build the curated docs site with `uv run python scripts/build_docs.py build` or `python scripts/build_docs.py build`.
+- Preview the site locally with `uv run python scripts/build_docs.py serve` or `python scripts/build_docs.py serve`.
+- The MkDocs configuration lives in `mkdocs.yml`; keep the notebook export script and docs navigation aligned when adding or removing published notebooks.
 
 ## Testing
 - `uv run pytest` runs the entire Pytest suite located under `tests/`; it respects the `dev` dependency group and uses whichever interpreter `uv` selects.
