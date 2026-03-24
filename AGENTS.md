@@ -12,7 +12,7 @@
 - Python 3.11 or newer is required per `pyproject.toml`; prefer to recreate a local interpreter with `python -m venv .venv` or reuse `py313` by running `source py313/bin/activate`.
 - Upgrade pip/setuptools before installing dependencies: `python -m pip install --upgrade pip setuptools wheel`.
 - Install runtime and dev requirements with `uv sync --all-groups` (it reads `pyproject.toml` and `uv.lock`).
-- Plain `pip` workflows should also work: use `python -m pip install .` for runtime installs or `python -m pip install -e '.[dev]'` for editable development installs.
+- Plain `pip` workflows should also work: use `python -m pip install .` for runtime installs or `python -m pip install -e '.[dev,docs]'` for editable development installs.
 - For repeatable shells, keep `uv.lock` in sync and rerun `uv sync --all-groups` whenever dependencies change.
 - After every dependency change, rerun `uv lock` and `uv sync --all-groups`, verify `uv.lock`, and commit both `pyproject.toml`/`uv.lock` together so the lock file never lags.
 - This project aspires to support both `uv` workflows and plain `python`/`pip` workflows; keep both paths working when changing packaging metadata or contributor docs.
@@ -26,6 +26,14 @@
 - Treat artifacts under `src/notebooks` as documentation: rerun them locally, then export new HTML/JSON when the narrative needs updating.
 - `uv build` is also the recommended way to exercise packaging metadata; if you override `uv` defaults, note the override in this file for future agents.
 
+## Documentation site
+- The GitHub Pages site is notebook-driven: canonical sources live in `src/notebooks/*.py`, with marimo notebooks acting as the authoritative docs source.
+- The initial public docs build currently includes only `src/notebooks/example_simulate_factory.py`; do not publish `src/notebooks/mnpe-demo.py`, `src/notebooks/toy2decay-simulator.py`, or their derived artifacts unless the docs scope changes.
+- Generated notebook artifacts under `docs/notebooks/*.ipynb` are temporary build outputs for MkDocs and must not be committed.
+- Build the curated docs site with `uv run python scripts/build_docs.py build` or `python scripts/build_docs.py build`.
+- Preview the site locally with `uv run python scripts/build_docs.py serve` or `python scripts/build_docs.py serve`.
+- The MkDocs configuration lives in `mkdocs.yml`; keep the notebook export script and docs navigation aligned when adding or removing published notebooks.
+
 ## Testing
 - `uv run pytest` runs the entire Pytest suite located under `tests/`; it respects the `dev` dependency group and uses whichever interpreter `uv` selects.
 - To focus on a single file, run `uv run pytest tests/test_generator.py` or `python -m pytest tests/test_generator.py` when you need extra Pytest flags.
@@ -35,11 +43,11 @@
 - Tests now live in `tests/test_generator.py` and use Pytest signatures and NumPy-style docstrings; refer to that file for examples of how to seed randomness and assert invariants about momentum/invariant mass.
 
 ## Generator & simulation
-- `src/ttpd/generator.py` now hosts the physics helpers (`to_cartesian`, `to_ptphieta`, `ptphieta_to_epxyz`, `invariant_mass_from_epxyz`, etc.) plus the abstractions `TwoProngDecay` and the `SimulateFactory` dataclass.
+- `src/ttpd/kinematics.py` now hosts the physics helpers (`to_cartesian`, `to_ptphieta`, `ptphieta_to_epxyz`, `invariant_mass_from_epxyz`, etc.) plus the shared constants `mZ0` and `mMu`, while `src/ttpd/generator.py` keeps the abstractions `TwoProngDecay` and the `SimulateFactory` dataclass.
 - `TwoProngDecay` exposes `generate`, `smear`, and `simulate` methods with configurable product mass, smearing function, device placement, and optional seeds to keep samplers deterministic.
 - The default smearing function mirrors the notebook’s `smear_ptphieta` (pt/dphi/eta jitter, independent phi/eta resets); inject a custom callable when you need a different detector model.
 - `SimulateFactory.create(...)` returns a dataclass that keeps the `TwoProngDecay` instance on the `decay` attribute while providing the single-argument `simulate(theta)` callable shown in the notebook. Pass `generation_seed`/`smear_seed` through the factory to reproduce specific draws or share random states across runs.
-- When updating this module, maintain NumPy-style docstrings and keep helper exports stable so that notebooks/tests relying on `to_ptphieta` or `invariant_mass_from_ptphieta` continue working.
+- When updating these modules, maintain NumPy-style docstrings and keep helper exports stable so that notebooks/tests relying on `to_ptphieta` or `invariant_mass_from_ptphieta` continue working.
 - When tests need to target CPU-only or GPU-specific behavior, pass `device=DEFAULT_DEVICE` explicitly and document the assumption in the test docstring comment.
 - PyTorch distributions (e.g., `torch.distributions.uniform.Uniform`) are already part of the helpers; if you add new samples, keep naming consistent and test the sampling shapes.
 

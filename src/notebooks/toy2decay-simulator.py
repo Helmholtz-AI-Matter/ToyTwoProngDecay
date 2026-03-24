@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.1"
 app = marimo.App(width="full")
 
 
@@ -109,7 +109,7 @@ def _(DEFAULT_DEVICE, mMu, phit1, to_ptphieta, torch):
         py1 = ptotal1 * sin_theta1 * torch.sin(phi1)
         pz1 = ptotal1 * cos_theta1
         pt1, phi1, eta1, mass1 = to_ptphieta(en1, px1, py1, pz1)
-    
+
         assert pt1.shape == torch.Size([n_samples,1]), f"pt1: {pt1.shape} != {n_samples,1}"
         assert phi1.shape == torch.Size([n_samples,1]), f"phi1: {phit1.shape} != {n_samples,1}"
 
@@ -309,7 +309,6 @@ def _(
 
     assert z0_mass.shape == theta_z0[:,0].unsqueeze(1).shape, f"{z0_mass.shape, theta_z0[:,0].shape}"
     assert torch.allclose(theta_z0[:,0],z0_mass), f"{theta_z0[:,0]} != \n{z0_mass.flatten()}"
-
     return
 
 
@@ -509,23 +508,24 @@ def _(
     axs_[0,0].set_ylabel("count / 1 GeV")
     axs_[0,0].set_yscale("log")
 
+
+    axs_[0,1].hist([mc_x[:num_signal,0], mc_x[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
+    axs_[0,1].set_xlabel( "mass / 'GeV'")
+    axs_[0,1].set_ylabel("count / 1 GeV")
+    axs_[0,1].set_title("mass calculated from x w/o smearing (ptphieta)")
+    axs_[0,1].set_yscale("log")
+    #axs_[1].set_yscale("log")
+
     axs_[0,2].hist([pseudo_x[:num_signal,0], pseudo_x[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
     axs_[0,2].set_xlabel("(rec) mass / 'GeV'")
     axs_[0,2].set_ylabel("count / 1 GeV")
     axs_[0,2].set_title("mass calculated from x w/ smearing")
     axs_[0,2].set_yscale("log")
 
-    axs_[0,1].hist([mc_x[:num_signal,0], mc_x[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
-    axs_[0,1].set_xlabel( "mass / 'GeV'")
-    axs_[0,1].set_ylabel("count / 1 GeV")
-    axs_[0,1].set_title("mass calculated from x w/o smearing")
-    axs_[0,1].set_yscale("log")
-    #axs_[1].set_yscale("log")
-
     axs_[0,3].hist([mc_inv[:num_signal,0], mc_inv[num_signal:,0]], bins=np.arange(62,122,1.), stacked=True, label=["signal", "background"] )
     axs_[0,3].set_xlabel("mass / 'GeV'")
     axs_[0,3].set_ylabel("count / 1 GeV")
-    axs_[0,3].set_title("mass calculated from x w/o smearing")
+    axs_[0,3].set_title("mass calculated from x w/o smearing (epxyz)")
     axs_[0,3].set_yscale("log")
 
     #axs_[1].set_ylim(1,10_000)
@@ -543,6 +543,19 @@ def _(
     axs_[1,1].set_ylabel("count / 1 GeV")
     axs_[1,1].set_title("mass calculated from x w/ smearing")
     axs_[1,1].set_yscale("log")
+
+    axs_[1,2].hist(theta[:num_signal,0], bins=20, color="darkorange", label=["signal"] )
+    axs_[1,2].set_title("`theta` from toy prior")
+    axs_[1,2].set_xlabel("input mass / 'GeV'")
+    axs_[1,2].set_ylabel("count / 1 GeV")
+    axs_[1,2].set_yscale("log")
+
+    axs_[1,3].hist(pseudo_x[:num_signal,0], bins=20, color="darkorange", label=["signal"] )
+    axs_[1,3].set_title("signal mass calculated from x w/ smearing")
+    axs_[1,3].set_xlabel("input mass / 'GeV'")
+    axs_[1,3].set_ylabel("count / 1 GeV")
+    axs_[1,3].set_yscale("log")
+
 
     fig2
     return

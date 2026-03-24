@@ -30,6 +30,12 @@ dev = [
     "ruff>=0.13.0",
     "sbi==0.25.0",
 ]
+docs = [
+    "marimo>=0.20.4",
+    "mkdocs>=1.6.1",
+    "mkdocs-jupyter>=0.25.1",
+    "mkdocs-material>=9.6.0",
+]
 
 [project.scripts]
 ttpd = "ttpd:main"
@@ -43,10 +49,17 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "marimo>=0.21.1",
     "mypy>=1.18.2",
     "pytest>=9.0.2",
     "ruff>=0.13.0",
     "sbi==0.25.0",
+]
+docs = [
+    "marimo>=0.20.4",
+    "mkdocs>=1.6.1",
+    "mkdocs-jupyter>=0.25.1",
+    "mkdocs-material>=9.6.0",
 ]
 
 [tool.ruff]

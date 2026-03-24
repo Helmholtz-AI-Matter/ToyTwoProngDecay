@@ -1,0 +1,18 @@
+site_name: ToyTwoProngDecay
+site_description: Curated notebook-driven documentation for ToyTwoProngDecay.
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+plugins:
+  - search
+  - mkdocs-jupyter:
+      include:
+        - "*.ipynb"
+      execute: false
+      allow_errors: false
+      kernel_name: python3
+nav:
+  - Home: index.md
+  - SimulateFactory example: notebooks/example_simulate_factory.ipynb
