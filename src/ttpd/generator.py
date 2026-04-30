@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable
 
 import torch
 
@@ -14,17 +13,10 @@ DEFAULT_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 """Default device for generators (GPU if available, CPU otherwise)."""
 
 
-@runtime_checkable
-class Smearer(Protocol):
-    """Callable detector-response model used to smear decay events."""
+SmearFn = Callable[[torch.Tensor, int | None], torch.Tensor]
+"""Signature for smear functions (batch, seed) -> smeared batch."""
 
-    def __call__(
-        self, batch_decay_vectors: torch.Tensor, seed: int | None = None
-    ) -> torch.Tensor:
-        """Apply detector response to a batch of events."""
-
-
-SmearFn = Smearer
+Smearer = SmearFn
 """Backward-compatible alias for smear callables."""
 
 
