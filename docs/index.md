@@ -8,4 +8,5 @@ initial documentation build until they are ready.
 
 ## Published notebooks
 
-- [SimulateFactory example](notebooks/example_simulate_factory.ipynb)
+- [SimulateFactory defaults](notebooks/example_simulate_factory.ipynb)
+- [SimulateFactory configurable](notebooks/example_simulate_factory_configurable.ipynb)

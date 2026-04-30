@@ -12,8 +12,12 @@ from ttpd.kinematics import mMu, to_ptphieta
 DEFAULT_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 """Default device for generators (GPU if available, CPU otherwise)."""
 
+
 SmearFn = Callable[[torch.Tensor, int | None], torch.Tensor]
 """Signature for smear functions (batch, seed) -> smeared batch."""
+
+Smearer = SmearFn
+"""Backward-compatible alias for smear callables."""
 
 
 def _kaellen_function(
@@ -100,11 +104,12 @@ class TwoProngDecay:
     def __init__(
         self,
         product_mass: float = mMu,
-        smear_fn: SmearFn = default_smear_ptphieta,
+        smearer: Smearer = default_smear_ptphieta,
+        smear_fn: Smearer | None = None,
         device: torch.device = DEFAULT_DEVICE,
     ) -> None:
         self.product_mass = product_mass
-        self.smear_fn = smear_fn
+        self.smearer = smearer if smear_fn is None else smear_fn
         self.device = device
 
     def generate(
@@ -224,7 +229,7 @@ class TwoProngDecay:
         torch.Tensor
             Smeared events with shape (B, 8).
         """
-        return self.smear_fn(events, seed)
+        return self.smearer(events, seed)
 
     def simulate(
         self,
@@ -265,13 +270,17 @@ class SimulateFactory:
     def create(
         cls,
         product_mass: float = mMu,
-        smear_fn: SmearFn = default_smear_ptphieta,
+        smearer: Smearer = default_smear_ptphieta,
+        smear_fn: Smearer | None = None,
         device: torch.device = DEFAULT_DEVICE,
     ) -> SimulateFactory:
         """Create a factory with a new TwoProngDecay instance."""
         return cls(
             decay=TwoProngDecay(
-                product_mass=product_mass, smear_fn=smear_fn, device=device
+                product_mass=product_mass,
+                smearer=smearer,
+                smear_fn=smear_fn,
+                device=device,
             )
         )
 

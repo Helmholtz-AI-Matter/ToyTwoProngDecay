@@ -1,7 +1,5 @@
 """Pytest suite covering the two-prong decay generator."""
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 import torch
 
@@ -14,10 +12,6 @@ from ttpd.kinematics import (
     to_ptphieta,
 )
 
-if TYPE_CHECKING:
-    from ttpd.generator import SmearFn
-
-
 np.random.seed(42)
 torch.manual_seed(42)
 
@@ -27,6 +21,27 @@ DEFAULT_DEVICE = generator.DEFAULT_DEVICE
 def identity_smear(batch: torch.Tensor, _seed: int | None = None) -> torch.Tensor:
     """Pass through the inputs unchanged (useful for invariant tests)."""
     return batch
+
+
+class RecordingSmearer:
+    def __init__(self) -> None:
+        self.seeds: list[int | None] = []
+
+    def __call__(self, batch: torch.Tensor, seed: int | None = None) -> torch.Tensor:
+        self.seeds.append(seed)
+        return batch.clone()
+
+
+class ScaleSmearer:
+    def __init__(self, scale: float) -> None:
+        self.scale = scale
+
+    def __call__(self, batch: torch.Tensor, seed: int | None = None) -> torch.Tensor:
+        _ = seed
+        scaled = batch.clone()
+        scaled[:, 0] *= self.scale
+        scaled[:, 4] *= self.scale
+        return scaled
 
 
 def test_simulate_shape_and_finite() -> None:
@@ -133,6 +148,40 @@ def test_create_simulator_matches_simulate() -> None:
     assert torch.allclose(simulated, direct)
 
 
+def test_custom_smearer_callable_object_is_used() -> None:
+    smearer = ScaleSmearer(scale=0.9)
+    decay = generator.TwoProngDecay(smearer=smearer)
+    theta = torch.tensor([[82.0, 0.0]] * 16, device=DEFAULT_DEVICE)
+
+    events = decay.simulate(theta, generation_seed=5)
+
+    assert torch.allclose(events[:, 0], events[:, 4], atol=1e-4)
+    assert torch.all(events[:, 0] < torch.full_like(events[:, 0], 82.0))
+
+
+def test_smear_seed_is_forwarded_to_smearer() -> None:
+    smearer = RecordingSmearer()
+    decay = generator.TwoProngDecay(smearer=smearer)
+    theta = torch.tensor([[mZ0, 0.0]] * 4, device=DEFAULT_DEVICE)
+
+    _ = decay.simulate(theta, generation_seed=3, smear_seed=17)
+
+    assert smearer.seeds == [17]
+
+
+def test_factory_create_accepts_smearer() -> None:
+    smearer = ScaleSmearer(scale=0.95)
+    factory = generator.SimulateFactory.create(smearer=smearer)
+    theta = torch.tensor([[82.0, 0.0]] * 8, device=DEFAULT_DEVICE)
+
+    direct = factory.simulate(theta, generation_seed=5)
+    simulator = factory.create_simulator(generation_seed=5)
+    indirect = simulator(theta)
+
+    assert torch.allclose(direct, indirect)
+    assert torch.all(direct[:, 0] < torch.full_like(direct[:, 0], 82.0))
+
+
 def test_create_simulator_device_override() -> None:
     factory = generator.SimulateFactory.create(smear_fn=identity_smear)
     theta = torch.tensor([[mZ0, 0.0]] * 16, device=DEFAULT_DEVICE)
@@ -158,14 +207,8 @@ def test_create_simulator_device_override() -> None:
 def test_custom_mass_and_smear_affects_pt() -> None:
     custom_pt_scale = 0.9
 
-    def custom_smear(batch: torch.Tensor, _seed: int | None = None) -> torch.Tensor:
-        scaled = batch.clone()
-        scaled[:, 0] *= custom_pt_scale
-        scaled[:, 4] *= custom_pt_scale
-        return scaled
-
-    custom_smear_fn: SmearFn = custom_smear
-    decay = generator.TwoProngDecay(product_mass=0.211, smear_fn=custom_smear_fn)
+    custom_smearer = ScaleSmearer(scale=custom_pt_scale)
+    decay = generator.TwoProngDecay(product_mass=0.211, smearer=custom_smearer)
     theta = torch.tensor([[82.0, 0.0]] * 32, device=DEFAULT_DEVICE)
     events = decay.simulate(theta, generation_seed=5)
     assert torch.allclose(events[:, 0], events[:, 4], atol=1e-4)
