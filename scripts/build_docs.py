@@ -12,6 +12,9 @@ PUBLISHED_NOTEBOOKS: dict[Path, Path] = {
     ROOT / "src" / "notebooks" / "example_simulate_factory.py": (
         GENERATED_NOTEBOOK_DIR / "example_simulate_factory.ipynb"
     ),
+    ROOT / "src" / "notebooks" / "example_simulate_factory_configurable.py": (
+        GENERATED_NOTEBOOK_DIR / "example_simulate_factory_configurable.ipynb"
+    ),
 }
 
 

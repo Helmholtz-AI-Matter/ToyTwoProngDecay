@@ -4,12 +4,20 @@ __generated_with = "0.21.1"
 app = marimo.App()
 
 
+@app.cell
+def _():
+    import marimo as mo
+
+    return (mo,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # SimulateFactory example
-    This notebook demonstrates how to configure `SimulateFactory` for Z⁰→μ⁺μ⁻ signal generations plus background processes,
-    then sketches the resulting invariant mass distributions for the prior, the smeared observations, and their difference.
+    This notebook demonstrates the default `SimulateFactory` workflow for
+    Z⁰→μ⁺μ⁻ signal and background generation, then sketches the resulting
+    invariant mass distributions for the prior and the smeared observations.
     """)
     return
 
@@ -17,10 +25,10 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Configure the simulator
+    ## Use the defaults
     The first step is to import the physics helpers and instantiate a
-    `SimulateFactory` on CPU so the example remains reproducible across local and
-    CI documentation builds.
+    `SimulateFactory` on CPU with its built-in settings so the example remains
+    reproducible across local and CI documentation builds.
     """)
     return
 
@@ -70,7 +78,9 @@ def _(mo):
     mo.md(r"""
     ## Generate events and inspect reconstructed masses
 
-    We now bootstrap the simulate function from the factory object. This has the benefit that we can integrate useful parameters like seeds or smearing functions or target devices into the simulate call directly.
+    We now bootstrap the simulate function from the factory object. This has the
+    benefit that we can integrate useful parameters like seeds, smearing
+    functions, or target devices into the simulate call directly.
     """)
     return
 
@@ -91,7 +101,8 @@ def _(factory, theta, torch):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The simulate function returns 4-vectors of the two decay prongs only. We can now continue and calculate the invariant masses of the events provided.
+    The simulate function returns 4-vectors of the two decay prongs only. We can
+    now continue and calculate the invariant masses of the events provided.
     """)
     return
 
@@ -112,7 +123,9 @@ def _(events, invariant_mass_from_ptphieta, plt, theta):
 def _(mo):
     mo.md(r"""
     ## Compare prior and reconstructed spectra
-    The following plot compares the sampled parent-mass prior with the reconstructed invariant masses obtained from the smeared decay products.
+
+    The following plot compares the sampled parent-mass prior with the
+    reconstructed invariant masses obtained from the smeared decay products.
     """)
     return
 
@@ -140,7 +153,10 @@ def _(mo):
     mo.md(r"""
     ## More real world generation
 
-    In the cell below, we generate a set of signal events and one background channel only. For each channel, we select a distribution of mass values, but have to assign the channel ID by virtue of an integer (`0` for signal, `1` for background).
+    In the cell below, we generate a set of signal events and one background
+    channel only. For each channel, we select a distribution of mass values,
+    but have to assign the channel ID by virtue of an integer (`0` for signal,
+    `1` for background).
     """)
     return
 
@@ -170,7 +186,8 @@ def _(mZ0, torch):
 def _(thetas):
     # what it looks like
     print(
-        f"created simulation parameter samples of shape {thetas.shape}\n and type {thetas.dtype}\n"
+        f"created simulation parameter samples of shape {thetas.shape}\n"
+        f"and type {thetas.dtype}\n"
     )
     print(f"the first entries contain signal 'events'\n{thetas[:5, ...]}")
     print(f"the last entries contain background 'events'\n{thetas[-5:, ...]}")
@@ -232,20 +249,10 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The above plot shows the generated samples (left) and smeared+reconstructed on the right. We see that the cauchy distribution has become wider as we smeared the kinematics of the decay products.
+    The above plot shows the generated samples (left) and smeared +
+    reconstructed on the right. We see that the cauchy distribution has become
+    wider as we smeared the kinematics of the decay products.
     """)
-    return
-
-
-@app.cell
-def _():
-    import marimo as mo
-
-    return (mo,)
-
-
-@app.cell
-def _():
     return
 
 

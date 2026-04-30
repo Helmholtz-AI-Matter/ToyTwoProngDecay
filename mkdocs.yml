@@ -15,4 +15,5 @@ plugins:
       kernel_name: python3
 nav:
   - Home: index.md
-  - SimulateFactory example: notebooks/example_simulate_factory.ipynb
+  - SimulateFactory defaults: notebooks/example_simulate_factory.ipynb
+  - SimulateFactory configurable: notebooks/example_simulate_factory_configurable.ipynb
