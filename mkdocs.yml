@@ -17,3 +17,4 @@ nav:
   - Home: index.md
   - SimulateFactory defaults: notebooks/example_simulate_factory.ipynb
   - SimulateFactory configurable: notebooks/example_simulate_factory_configurable.ipynb
+  - simulation-based inference example: notebooks/mnpe-example.ipynb
