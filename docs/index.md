@@ -10,3 +10,4 @@ initial documentation build until they are ready.
 
 - [SimulateFactory defaults](notebooks/example_simulate_factory.ipynb)
 - [SimulateFactory configurable](notebooks/example_simulate_factory_configurable.ipynb)
+- [simulation-based inference MNPE density estimation](notebooks/mnpe-example.ipynb)
